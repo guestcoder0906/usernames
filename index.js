@@ -235,6 +235,89 @@ function shuffleArray(array) {
   return arr;
 }
 
+async function checkRobloxValidation(usernameToTest) {
+  const apiUrl = "https://auth.roblox.com/v2/usernames/validate";
+  const payload = {
+    "username": usernameToTest,
+    "birthday": "1999-01-01"
+  };
+
+  try {
+    console.log("Querying Roblox Validation API for censorship...");
+    const response = await axios.post(apiUrl, payload, {
+      headers: { 'Content-Type': 'application/json' },
+      validateStatus: () => true
+    });
+    const jsonResponse = response.data;
+
+    if (jsonResponse.code) {
+      const isSuccess = (jsonResponse.message === "Valid username.");
+      if (!isSuccess) {
+        console.log("FAIL: Roblox Validation API rejected it. Code: " + jsonResponse.code + ", Message: " + jsonResponse.message);
+        return false;
+      }
+    }
+    console.log("PASS: Roblox Validation API is clean.");
+    return true;
+  } catch (error) {
+    console.error("CRITICAL EXCEPTION in Roblox Validation API fetch: " + error);
+    return false;
+  }
+}
+
+function applySmartSubtleReduction(word) {
+  if (!word || word.length < 4) return null;
+  
+  const reductions = [];
+  const lowerWord = word.toLowerCase();
+  
+  const doubleLetterPattern = /(.)\1+/g;
+  const reducedDouble = lowerWord.replace(doubleLetterPattern, '$1');
+  if (reducedDouble !== lowerWord && reducedDouble.length >= 3) {
+    reductions.push(reducedDouble);
+  }
+  
+  const vowelRemovals = [];
+  const vowels = ['a', 'e', 'i', 'o', 'u'];
+  for (let i = 1; i < lowerWord.length - 1; i++) {
+    if (vowels.includes(lowerWord[i])) {
+      const reduced = lowerWord.slice(0, i) + lowerWord.slice(i + 1);
+      if (reduced.length >= 3 && reduced.length <= 20) {
+        vowelRemovals.push(reduced);
+      }
+    }
+  }
+  reductions.push(...vowelRemovals.slice(0, 3));
+  
+  if (lowerWord.length > 6) {
+    const truncated = lowerWord.substring(0, Math.max(4, Math.floor(lowerWord.length * 0.7)));
+    if (truncated.length >= 3) {
+      reductions.push(truncated);
+    }
+  }
+  
+  const suffixes = ['er', 'ly', 'ing', 'ed', 'ness', 'tion', 'sion', 'ment', 'able', 'ible'];
+  for (const suffix of suffixes) {
+    if (lowerWord.endsWith(suffix) && lowerWord.length > suffix.length + 2) {
+      const stemmed = lowerWord.slice(0, -suffix.length);
+      if (stemmed.length >= 3) {
+        reductions.push(stemmed);
+        break;
+      }
+    }
+  }
+  
+  const uniqueReductions = [...new Set(reductions)];
+  
+  for (const reduction of uniqueReductions) {
+    if (reduction.length >= 3 && reduction.length <= 20) {
+      return reduction;
+    }
+  }
+  
+  return null;
+}
+
 async function stripSafeDictionaryWords(str) {
   const chars = str.split("");
   const length = chars.length;
@@ -495,6 +578,18 @@ async function generateCoolUsername() {
     if (await checkUsernameAvailability(baseWord)) {
       return { "username": baseWord, "available": true, "method": "CleanRandom" };
     }
+
+    const methodChoice = Math.random();
+    
+    if (methodChoice < 0.50) {
+      const subtleResult = applySmartSubtleReduction(baseWord);
+      if (subtleResult) {
+        if (await checkUsernameAvailability(subtleResult)) {
+          return { "username": subtleResult, "available": true, "method": "SubtleReduction" };
+        }
+      }
+    }
+    
     const leetResult = await solveLeetspeak(baseWord);
     if (leetResult) {
       return { "username": leetResult, "available": true, "method": "Leetspeak" };

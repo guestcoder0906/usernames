@@ -1,0 +1,798 @@
+// ============================================================================
+// MAIN HANDLER
+// ============================================================================
+
+function doGet(e) {
+  // 1. COOL USERNAME GENERATOR (?cool=true)
+  if (e.parameter.cool === "true") {
+    return handleCoolRequest();
+  }
+
+  // 2. RANDOM WORD CHECK (?word=true)
+  if (e.parameter.word === "true") {
+    return handleRandomWordRequest();
+  } 
+
+  // 3. SPECIFIC USERNAME CHECK (?username=xyz)
+  return handleSpecificCheck(e.parameter.username);
+}
+
+// ============================================================================
+// COOL GENERATOR LOGIC
+// ============================================================================
+
+function handleCoolRequest() {
+  // Try 4 times to find an available and non-profane name
+  for (var i = 0; i < 4; i++) {
+    var result = generateCoolUsername();
+    
+    if (result.available && !isProfaneDeepScan(result.username)) {
+       return ContentService.createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+      "username": null,
+      "available": false,
+      "error": "Generation timed out."
+  }))
+  .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================================================
+// COOL GENERATOR LOGIC (FULL UPDATED FUNCTION)
+// ============================================================================
+
+function generateCoolUsername() {
+  var isComboMode = Math.random() < 0.30; 
+  var slangListDefined = typeof SLANG_LIST !== 'undefined' && SLANG_LIST.length > 0;
+
+  if (isComboMode) {
+    // --- COMBO MODE (Logic remains mostly the same, with added safety checks) ---
+    var comboType = Math.random(); 
+    var part1 = "";
+    var part2 = "";
+
+    if (comboType < 0.33) {
+      var allowLong = Math.random() < 0.20;
+      part1 = getRandomWord(allowLong ? "medium" : "short");
+      part2 = getRandomWord(allowLong ? "medium" : "short");
+    } else if (comboType < 0.66) {
+      var rawSlang = slangListDefined ? SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)] : getRandomWord("short");
+      part1 = rawSlang.replace(/_/g, ""); 
+      part2 = getRandomWord("short");
+    } else {
+      part1 = getRandomWord("short");
+      var rawSlang = slangListDefined ? SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)] : getRandomWord("short");
+      part2 = rawSlang.replace(/_/g, "");
+    }
+    
+    // Capitalization and combination
+    part1 = part1.charAt(0).toUpperCase() + part1.slice(1);
+    part2 = part2.charAt(0).toUpperCase() + part2.slice(1);
+    
+    var combined = part1 + part2;
+    if (combined.length > 20) combined = combined.substring(0, 20);
+
+    if (checkUsernameAvailability(combined)) {
+      return { "username": combined, "available": true, "method": "ComboMode" };
+    } else {
+      return { "available": false };
+    }
+
+  } else {
+    // --- SINGLE WORD MODE (Updated with Subtle Reduction) ---
+    var baseWord = "";
+    var isSlang = Math.random() < 0.85;
+
+    // 1. Get a Base Word
+    if (isSlang && slangListDefined) {
+      var rawSlang = SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)];
+      baseWord = rawSlang.replace(/_/g, ""); // Flatten for processing
+    } else {
+      baseWord = getRandomWord("random");
+    }
+    
+    // Check the base word immediately as a quick win
+    if (checkUsernameAvailability(baseWord)) {
+         return { "username": baseWord, "available": true, "method": "CleanRandom" };
+    }
+
+
+    // 2. Decide: Leetspeak OR Subtle Reduction?
+    var methodChoice = Math.random();
+    
+    // OPTION A: Subtle Reduction (New Feature) - 50% chance
+    if (methodChoice < 0.50) {
+       var subtleResult = applySmartSubtleReduction(baseWord);
+       if (subtleResult) {
+         if (checkUsernameAvailability(subtleResult)) {
+           return { "username": subtleResult, "available": true, "method": "SubtleReduction" };
+         }
+       }
+    } 
+    
+    // OPTION B: Leetspeak (50% chance, or if Subtle failed)
+    var leetResult = solveLeetspeak(baseWord);
+    if (leetResult) {
+      return { "username": leetResult, "available": true, "method": "Leetspeak" };
+    }
+
+    // 3. Final Fallback (If all generation and variations failed)
+    return { "available": false };
+  }
+}
+
+function solveLeetspeak(word) {
+  var wordArr = word.toLowerCase().split('');
+  var indices = [];
+  
+  for (var i = 0; i < wordArr.length; i++) {
+    if (LEET_MAP[wordArr[i]]) indices.push(i);
+  }
+
+  if (indices.length === 0) return null;
+
+  var maxLevel = Math.min(indices.length, 5);
+  
+  for (var level = 1; level <= maxLevel; level++) {
+    for (var attempt = 0; attempt < 5; attempt++) {
+      var tempWordArr = [...wordArr];
+      var targets = shuffleArray(indices).slice(0, level);
+      
+      targets.forEach(idx => {
+        var char = tempWordArr[idx];
+        var replacements = LEET_MAP[char];
+        var replacementIdx = Math.floor(Math.random() * Math.min(replacements.length, 2)); 
+        tempWordArr[idx] = replacements[replacementIdx];
+      });
+
+      var candidate = tempWordArr.join('');
+      if (candidate.length >= 3 && candidate.length <= 20) {
+        if (checkUsernameAvailability(candidate)) {
+          return candidate;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ============================================================================
+// MASTER AVAILABILITY CHECKER
+// ============================================================================
+
+function checkRobloxValidation(usernameToTest) {
+  var apiUrl = "https://auth.roblox.com/v2/usernames/validate";
+  
+  // The API expects a JSON payload for a POST request
+  var payload = {
+    "username": usernameToTest,
+    "birthday": "1999-01-01" // A placeholder birthday is usually required
+  };
+  
+  var options = {
+    'method': 'post',
+    'contentType': 'application/json',
+    'payload': JSON.stringify(payload),
+    'muteHttpExceptions': true
+  };
+
+  try {
+    console.log("Querying Roblox Validation API for censorship...");
+    var response = UrlFetchApp.fetch(apiUrl, options);
+    var responseCode = response.getResponseCode();
+    var jsonResponse = JSON.parse(response.getContentText());
+
+    // The API returns 200 (OK) if it was able to process the request.
+    // The key status is in the 'code' or 'message' of the JSON response.
+    if (jsonResponse.code) {
+      // Common codes for failure:
+      // Code 1: Invalid username
+      // Code 3: Username is already taken (This is a confusing error for a validation API, but it happens)
+      // Code 4: Username is not appropriate for Roblox (CENSORED/INAPPROPRIATE)
+      
+      var isSuccess = (jsonResponse.message === "Valid username.");
+
+      if (!isSuccess) {
+          console.log("FAIL: Roblox Validation API rejected it. Code: " + jsonResponse.code + ", Message: " + jsonResponse.message);
+          return false;
+      }
+    }
+    
+    // If the API call succeeds and the message is "Valid username.", it passes.
+    console.log("PASS: Roblox Validation API is clean.");
+    return true;
+
+  } catch (error) {
+    console.error("CRITICAL EXCEPTION in Roblox Validation API fetch: " + error);
+    // Fail safe if the API is down or there's an error.
+    return false;
+  }
+}
+
+// ============================================================================
+// HELPERS (UPDATED)
+// ============================================================================
+
+/**
+ * UPDATED: Generates variations by treating EVERY repeated sequence of letters 
+ * as both a single letter and a double letter.
+ * Supports ALL letters (a-z).
+ */
+function generateRepeatedVariations(text) {
+  if (!text) return [];
+  
+  // 1. Group identical characters
+  // Example: "niiigggaah" -> ["n", "iii", "ggg", "aa", "h"]
+  var groups = [];
+  
+  for (var i = 0; i < text.length; i++) {
+    var char = text[i];
+    if (groups.length > 0 && groups[groups.length - 1][0] === char) {
+      groups[groups.length - 1] += char;
+    } else {
+      groups.push(char);
+    }
+  }
+
+  // 2. Build options for each group
+  var optionsList = [];
+  for (var g = 0; g < groups.length; g++) {
+    var group = groups[g];
+    var char = group[0];
+    
+    // Logic: 
+    // If length is 1, keep as 1.
+    // If length > 1, try both single (squashed) and double.
+    if (group.length === 1) {
+      optionsList.push([char]);
+    } else {
+      optionsList.push([char, char + char]);
+    }
+  }
+  
+  return cartesianProduct(optionsList);
+}
+
+/**
+ * NEW: Decodes a string using the custom LEET_MAP provided.
+ * Handles multi-character leets (like "13" -> "b" or "vv" -> "w").
+ */
+function deLeetStringWithMap(str) {
+  if (!str) return "";
+  var processed = str.toLowerCase();
+
+  // 1. Convert LEET_MAP to a flat list of replacements
+  // We need [{leet: "13", real: "b"}, {leet: "4", real: "a"}...]
+  var replacements = [];
+  for (var realChar in LEET_MAP) {
+    var symbols = LEET_MAP[realChar];
+    for (var i = 0; i < symbols.length; i++) {
+      replacements.push({ leet: symbols[i], real: realChar });
+    }
+  }
+
+  // 2. SORT by length DESCENDING
+  // This is CRITICAL. We must replace "13" (b) before "1" (i).
+  // We must replace "vv" (w) before "v".
+  replacements.sort(function(a, b) {
+    return b.leet.length - a.leet.length;
+  });
+
+  // 3. Apply replacements
+  for (var j = 0; j < replacements.length; j++) {
+    var item = replacements[j];
+    
+    // We use a global Replace for this symbol
+    // Escape special regex characters if your map has them (like '+')
+    var esc = item.leet.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    var re = new RegExp(esc, "g");
+    
+    processed = processed.replace(re, item.real);
+  }
+  
+  return processed;
+}
+
+// Standard Cartesian Product Helper (No changes needed, but ensuring you have it)
+function cartesianProduct(arrays) {
+  var result = [""];
+  if (arrays.length > 15) return [arrays.map(a => a[0]).join("")];
+
+  for (var i = 0; i < arrays.length; i++) {
+    var currentOptions = arrays[i];
+    var temp = [];
+    if (result.length > 200) return result; 
+
+    for (var r = 0; r < result.length; r++) {
+      for (var o = 0; o < currentOptions.length; o++) {
+        temp.push(result[r] + currentOptions[o]);
+      }
+    }
+    result = temp;
+  }
+  return result;
+}
+
+// Helper to calculate combinations
+function cartesianProduct(arrays) {
+  var result = [""];
+  
+  // Limit complexity: If we have too many groups, just take the single-char version to save time
+  if (arrays.length > 15) return [arrays.map(a => a[0]).join("")];
+
+  for (var i = 0; i < arrays.length; i++) {
+    var currentOptions = arrays[i];
+    var temp = [];
+    
+    // Safety cap: Stop expanding if we have over 100 variations to check
+    if (result.length > 100) return result; 
+
+    for (var r = 0; r < result.length; r++) {
+      for (var o = 0; o < currentOptions.length; o++) {
+        temp.push(result[r] + currentOptions[o]);
+      }
+    }
+    result = temp;
+  }
+  return result;
+}
+
+// ============================================================================
+// MASTER AVAILABILITY CHECKER (UPDATED with Composite Safe Word Logic)
+// ============================================================================
+
+// ============================================================================
+// NEW HELPER: COMPOSITE DICTIONARY DECOMPOSITION
+// ============================================================================
+
+// ============================================================================
+// NEW HELPER: COMPOSITE DICTIONARY DECOMPOSITION (UPDATED)
+// ============================================================================
+
+/**
+ * Checks if a string (or its leet-decoded version) can be fully decomposed
+ * into safe dictionary words. Uses a GREEDY approach (longest word first)
+ * to avoid false positives from short substrings (e.g., 'bra' in 'brass').
+ * @param {string} username - The lowercase username string.
+ * @returns {{isSafe: boolean, hasBadWord: boolean, badWord: string}}
+ */
+function isComposedOfSafeWords(username) {
+    // 1. Define the roots we must check (Raw and De-Leeted)
+    var roots = [username];
+    // NOTE: deLeetStringWithMap must be available globally
+    var deLeeted = deLeetStringWithMap(username); 
+
+    if (deLeeted !== username) {
+        roots.push(deLeeted);
+    }
+    
+    // Check both roots
+    for (var i = 0; i < roots.length; i++) {
+        var root = roots[i];
+        
+        // Only run decomposition if the root is purely alphabetic (no numbers/symbols left after de-leet)
+        if (!/^[a-zA-Z]+$/.test(root)) {
+            continue; 
+        }
+
+        var badWordFound = "";
+        
+        // Recursive function to test if the string can be decomposed entirely into words
+        function decompose(remainingString) {
+            if (remainingString.length === 0) {
+                return true; // Success: The entire string was decomposed
+            }
+
+            // **** CRITICAL FIX: Loop from LONGEST possible word down to 3 ****
+            for (var len = remainingString.length; len >= 3; len--) {
+                var currentWord = remainingString.substring(0, len);
+                
+                // NOTE: isDictionaryWord must be available globally
+                if (isDictionaryWord(currentWord)) {
+                    // Word found: Check if it's banned
+                    // NOTE: BASE_BAD_WORDS must be available globally
+                    if (typeof BASE_BAD_WORDS !== 'undefined' && BASE_BAD_WORDS.indexOf(currentWord) !== -1) {
+                        // Found a bad component: Fail immediately and record the word
+                        badWordFound = currentWord;
+                        return true; // Return true to propagate the failure
+                    }
+                    
+                    // If safe, check the rest of the string recursively
+                    var restOfString = remainingString.substring(len);
+                    if (decompose(restOfString)) {
+                        return true; // Success! A full decomposition path (either safe or bad) was found.
+                    }
+                }
+            }
+            return false; // No path found from this point
+        }
+
+        // Run the recursive decomposition
+        var isFullyDecomposed = decompose(root);
+
+        if (isFullyDecomposed) {
+            // A full dictionary path was found
+            return {
+                isSafe: true, // A full dictionary path was found
+                hasBadWord: (badWordFound.length > 0), // Was one of the components banned?
+                badWord: badWordFound
+            };
+        }
+    }
+
+    // No valid dictionary-composed path was found for either root
+    return {
+        isSafe: false, // Must run deep scan
+        hasBadWord: false, 
+        badWord: ""
+    };
+}
+
+function checkUsernameAvailability(usernameToTest) {
+  console.log("--- Checking Availability for: " + usernameToTest + " ---");
+
+  // 2. Basic Regex & Roblox Rules (kept as safeguards)
+  if (!/^[a-zA-Z0-9_]+$/.test(usernameToTest)) {
+    console.log("FAIL: Regex validation failed (Invalid characters).");
+    return false;
+  }
+  
+  var underscores = (usernameToTest.match(/_/g) || []).length;
+  if (underscores > 1) {
+    console.log("FAIL: Too many underscores.");
+    return false;
+  }
+
+  if (usernameToTest.length < 3 || usernameToTest.length > 20) {
+    console.log("FAIL: Length must be 3-20 characters.");
+    return false;
+  }
+
+  // 5. COMPOSITE DICTIONARY WHITELIST CHECK (UPDATED LOGIC)
+  var shouldRunDeepScan = true;
+  var lowerUser = usernameToTest.toLowerCase();
+
+  // New check: See if the username, OR its decoded version, is entirely composed of safe words.
+  var safetyCheckResult = isComposedOfSafeWords(lowerUser);
+
+  if (safetyCheckResult.isSafe) {
+      if (safetyCheckResult.hasBadWord) {
+          // Case: "bluewaffle" -> Decomposed as "blue" + "waffle". 
+          // If "waffle" is on the BASE_BAD_WORDS list, it fails immediately.
+          console.log("FAIL: Composed of real words, but component '" + safetyCheckResult.badWord + "' is on the ban list.");
+          return false;
+      } else {
+          // Case: "bluebanana" -> Decomposed as "blue" + "banana". Both are safe.
+          console.log("SKIP: Username is composed entirely of safe dictionary words. Skipping deep scan.");
+          shouldRunDeepScan = false;
+      }
+  }
+
+  // 6. DEEP PERMUTATION PROFANITY CHECK
+  if (shouldRunDeepScan) {
+    if (isProfaneDeepScan(usernameToTest)) {
+      console.log("FAIL: Profanity detected in deep scan.");
+      return false; 
+    }
+  }
+
+  // 7. Check Roblox API (Is it taken?)
+  var apiUrl = "https://users.roblox.com/v1/usernames/users";
+  var payload = { "usernames": [usernameToTest], "excludeBannedUsers": false };
+  var options = {
+    'method': 'post',
+    'contentType': 'application/json',
+    'payload': JSON.stringify(payload),
+    'muteHttpExceptions': true,
+    'headers': { 'Cookie': ROBLOX_SECURITY_TOKEN }
+  };
+
+  try {
+    console.log("Querying Roblox API (check if taken)...");
+    var response = UrlFetchApp.fetch(apiUrl, options);
+    var responseCode = response.getResponseCode();
+    
+    if (responseCode !== 200) {
+      console.error("ROBLOX API ERROR: " + responseCode);
+      return false; 
+    }
+
+    var jsonResponse = JSON.parse(response.getContentText());
+    var isRobloxAvailable = (jsonResponse.data && jsonResponse.data.length === 0);
+
+    if (!isRobloxAvailable) {
+      console.log("FAIL: Username taken on Roblox.");
+      return false;
+    }
+
+    // 8. FINAL CHECK: Purgomalum
+    console.log("Roblox says available. Checking Purgomalum...");
+    var isClean = !checkIsProfane(usernameToTest);
+    
+    if (!isClean) console.log("FAIL: Purgomalum flagged it.");
+    else console.log("SUCCESS: Username is available!");
+    
+    return isClean;
+
+  } catch (error) {
+    console.error("CRITICAL EXCEPTION in Roblox API fetch: " + error);
+    return false;
+  }
+}
+
+// ============================================================================
+// DEEP SCAN LOGIC (CUSTOM LEET MAP + ALL LETTER VARIATIONS)
+// ============================================================================
+
+function isProfaneDeepScan(text) {
+  if (!text) return false;
+
+  var lowerText = text.toLowerCase();
+  
+  // 1. Always check the collapsed version (f_u_c_k -> fuck)
+  var rootsToCheck = [ lowerText.replace(/[\s_\-\.]/g, "") ];
+
+  // 2. THE FAST FIX: Single-Pass Vowel Injection
+  // If we see separators, create 5 specific versions where we fill the gaps with vowels.
+  // This turns "cr_ppy_idiot" into "crappyidiot", "creppyidiot", "crippyidiot"...
+  // It only adds 5 extra checks total (VERY FAST), but guarantees we hit the real word.
+  if (/[\s_\-\.]/.test(lowerText)) {
+    var vowels = ['a', 'e', 'i', 'o', 'u'];
+    // We treat all separators as the SAME vowel in each pass. 
+    // This catches "cr_ppy" -> "crappy" immediately.
+    for (var v = 0; v < vowels.length; v++) {
+      rootsToCheck.push(lowerText.replace(/[\s_\-\.]/g, vowels[v]));
+    }
+  }
+
+  // 3. De-Leet Logic (applied to the base collapsed version)
+  var cleanBase = rootsToCheck[0];
+  var deLeeted = deLeetStringWithMap(cleanBase); 
+  if (deLeeted !== cleanBase) {
+    rootsToCheck.push(deLeeted);
+  }
+
+  // 4. Run the checks on our small list of roots
+  var allCandidates = [];
+
+  // Flatten logic: Just check the roots. 
+  // We only run repeatedVariations (expensive) on the primary collapsed root to save time,
+  // because "crappy" doesn't need variation checks, it's a direct dictionary word.
+  for (var i = 0; i < rootsToCheck.length; i++) {
+    var root = rootsToCheck[i];
+    
+    // Only generate variations (repetition squashing) for the collapsed root
+    // For the vowel-filled roots, checking them directly is usually enough and much faster.
+    if (i === 0) {
+       allCandidates = allCandidates.concat(generateRepeatedVariations(root));
+    } else {
+       allCandidates.push(root);
+    }
+  }
+  
+  // Remove duplicates
+  allCandidates = [...new Set(allCandidates)];
+
+  console.log("Deep Scan checking " + allCandidates.length + " candidates (Fast Mode)");
+
+  for (var c = 0; c < allCandidates.length; c++) {
+    var variant = allCandidates[c];
+
+    // --- CHECK A: DIRECT BAN ---
+    if (typeof BASE_BAD_WORDS !== 'undefined' && BASE_BAD_WORDS.indexOf(variant) !== -1) {
+       console.log("FAIL: Found '" + variant + "' in ban list.");
+       return true;
+    }
+
+    // --- CHECK B: DICTIONARY EATER ---
+    // "crappyidiot" -> "idiot" is eaten -> "crappy" remains.
+    // "crappy" is in bad word list, so the eater refuses to eat it.
+    // Result: "crappy"
+    var eaten = stripSafeDictionaryWords(variant);
+    
+    if (eaten.length === 0) continue; 
+
+    // --- CHECK C: SUBSTRING ---
+    if (typeof BASE_BAD_WORDS !== 'undefined') {
+      for (var b = 0; b < BASE_BAD_WORDS.length; b++) {
+        if (eaten.indexOf(BASE_BAD_WORDS[b]) !== -1) {
+           console.log("FAIL: Detected '" + BASE_BAD_WORDS[b] + "' inside '" + variant + "'");
+           return true; 
+        }
+      }
+    }
+
+    // --- CHECK D: SKELETON (Failsafe) ---
+    var variantSkeleton = variant.replace(/[aeiou]/g, "");
+    if (variantSkeleton.length >= 2 && typeof BASE_BAD_WORDS !== 'undefined') {
+      for (var k = 0; k < BASE_BAD_WORDS.length; k++) {
+        var rootBad = BASE_BAD_WORDS[k];
+        var badSkeleton = rootBad.replace(/[aeiou]/g, "");
+        if (badSkeleton.length >= 2 && variantSkeleton === badSkeleton) {
+           console.log("FAIL: Skeleton match (" + variantSkeleton + ")");
+           return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * GREEDY DICTIONARY EATER
+ * Iterates through the string and removes valid dictionary words
+ * UNLESS that word is explicitly in the bad list.
+ */
+function stripSafeDictionaryWords(str) {
+  var chars = str.split(""); // Convert to array for easy replacement
+  var length = chars.length;
+
+  // Iterate through every character index
+  for (var i = 0; i < length; i++) {
+    
+    // Look for longest words first (Greedy approach)
+    // We check words from length 12 down to 3.
+    for (var len = 12; len >= 3; len--) {
+      if (i + len > length) continue;
+      
+      var substring = str.substring(i, i + len);
+      
+      // Optimization: Skip if it contains non-letters (already spaces)
+      if (substring.indexOf(" ") !== -1) continue;
+
+      // 1. Is it a dictionary word?
+      if (isDictionaryWord(substring)) {
+        
+        // 2. Is this dictionary word actually a BAD word? (e.g. "hell")
+        // If it is bad, we DO NOT strip it. We leave it for the scanner to catch.
+        if (BASE_BAD_WORDS.indexOf(substring) !== -1) {
+           // It's a valid word, but it's bad. Skip stripping.
+           continue; 
+        }
+
+        // 3. It is a SAFE dictionary word (e.g. "glass"). STRIP IT.
+        for (var k = 0; k < len; k++) {
+          chars[i + k] = " "; // Replace with space
+        }
+        
+        // Move the index forward to skip the word we just ate
+        i += len - 1; 
+        break; // Stop looking for other lengths at this position
+      }
+    }
+  }
+  return chars.join("");
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function getRandomWord(mode) {
+  try {
+    var response = UrlFetchApp.fetch("https://random-word-api.herokuapp.com/word?number=5");
+    var words = JSON.parse(response.getContentText());
+    
+    if (mode === "short") {
+      var short = words.find(w => w.length <= 5);
+      return short || words[0]; 
+    } else if (mode === "medium") {
+      var med = words.find(w => w.length <= 9);
+      return med || words[0];
+    }
+    return words[0];
+  } catch (e) {
+    return "bruh"; 
+  }
+}
+
+function isDictionaryWord(word) {
+  // Check Cache first to save API calls
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get("dict_" + word);
+  
+  if (cached !== null) {
+    return cached === "true";
+  }
+
+  try {
+    // Free Dictionary API
+    var url = "https://api.dictionaryapi.dev/api/v2/entries/en/" + word;
+    var response = UrlFetchApp.fetch(url, {'muteHttpExceptions': true});
+    
+    var isValid = false;
+    if (response.getResponseCode() === 200) {
+      isValid = true;
+    }
+
+    // Cache result for 6 hours
+    cache.put("dict_" + word, isValid.toString(), 21600); 
+    return isValid;
+
+  } catch (e) {
+    console.log("Dictionary API Error: " + e);
+    return false; 
+  }
+}
+
+function handleRandomWordRequest() {
+  var w = getRandomWord("random");
+  var avail = checkUsernameAvailability(w);
+  return ContentService.createTextOutput(JSON.stringify({ "username": w, "available": avail }))
+        .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleSpecificCheck(username) {
+  if (!username) return ContentService.createTextOutput("TAKEN").setMimeType(ContentService.MimeType.TEXT);
+  return ContentService.createTextOutput(checkUsernameAvailability(username) ? "AVAILABLE" : "TAKEN")
+        .setMimeType(ContentService.MimeType.TEXT);
+}
+
+function checkIsProfane(text) {
+  try {
+    var encodedText = encodeURIComponent(text);
+    var url = "https://www.purgomalum.com/service/json?text=" + encodedText;
+    var response = UrlFetchApp.fetch(url, {'muteHttpExceptions': true});
+    var json = JSON.parse(response.getContentText());
+    if (json.result && json.result.indexOf("*") !== -1) return true; 
+    return false;
+  } catch (e) {
+    return false; 
+  }
+}
+
+function generateVariations(word) {
+  if (!word) return [];
+  word = word.replace(/\s/g, ""); 
+  if (word.length === 0) return [];
+
+  var groups = [];
+  var currentGroup = [word[0]];
+  
+  for (var i = 1; i < word.length; i++) {
+    if (word[i] === word[i-1]) currentGroup.push(word[i]);
+    else { groups.push(currentGroup); currentGroup = [word[i]]; }
+  }
+  groups.push(currentGroup);
+
+  var optionsList = [];
+  for (var j = 0; j < groups.length; j++) {
+    var char = groups[j][0];
+    var len = groups[j].length;
+    var opts = [char]; 
+    if (len > 1) opts.push(char + char); 
+    optionsList.push(opts);
+  }
+
+  // Cap variations to prevent timeout
+  if (optionsList.length > 10) return [word]; 
+
+  return cartesian(optionsList);
+}
+
+function cartesian(arg) {
+    var r = [], max = arg.length-1;
+    function helper(arr, i) {
+        for (var j=0, l=arg[i].length; j<l; j++) {
+            var a = arr.slice(0); 
+            a.push(arg[i][j]);
+            if (i==max) r.push(a.join(""));
+            else helper(a, i+1);
+        }
+    }
+    helper([], 0);
+    return r;
+}
+
+function shuffleArray(array) {
+  var arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
