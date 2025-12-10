@@ -1,24 +1,42 @@
-# Node.js Backend Scripting Project
+# Roblox Username Checker API
 
 ## Overview
-A minimal Node.js project set up for backend scripting with the Google APIs library.
+A Node.js Express server that checks Roblox username availability with profanity filtering and cool username generation.
 
 ## Project Structure
-- `index.js` - Main entry point for your script (currently empty, ready for your code)
-- `package.json` - Project configuration with googleapis dependency
+- `index.js` - Express server with API endpoints
+- `package.json` - Project configuration with dependencies
 
 ## Dependencies
-- **googleapis** - Official Google APIs client library for Node.js
+- **express** - Web server framework
+- **axios** - HTTP client for API requests
+- **googleapis** - Google APIs client library
+
+## API Endpoints
+
+### GET /
+Health check endpoint. Returns server status.
+
+### GET /api
+Main API endpoint with query parameters:
+- `?cool=true` - Generate a cool, available username
+- `?word=true` - Check a random word for availability
+- `?username=xyz` - Check if a specific username is available (returns "AVAILABLE" or "TAKEN")
+
+## Environment Variables
+- `ROBLOX_SECURITY_TOKEN` - (Optional) Roblox security token for authenticated API calls
 
 ## Usage
-Run the script with:
-```bash
-npm start
+The server runs on port 5000. Access the API at:
 ```
-or
-```bash
-node index.js
+http://localhost:5000/api?username=testname
+http://localhost:5000/api?cool=true
+http://localhost:5000/api?word=true
 ```
 
 ## Recent Changes
-- December 10, 2025: Initial project setup with Node.js 20 and googleapis package
+- December 10, 2025: Converted from Google Apps Script to Node.js Express server
+- Added express and axios dependencies
+- Replaced UrlFetchApp with axios for HTTP requests
+- Replaced ContentService with Express response methods
+- Server now listens on port 5000
