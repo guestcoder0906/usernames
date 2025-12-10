@@ -30,7 +30,8 @@ args = "node index.js"
 waitForPort = 5000
 
 [deployment]
-deploymentTarget = "cloudrun"
+deploymentTarget = "autoscale"
+run = ["node", "index.js"]
 
 [[ports]]
 localPort = 5000
