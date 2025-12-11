@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox Username Tools</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Base Variables */
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent-color: #58a6ff;
+            --accent-hover: #1f6feb;
+            --border-color: #30363d;
+            --success-color: #2ea043;
+            --error-color: #f85149;
+            --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            color: #ffffff;
+            font-size: 2.5rem;
+            margin: 0 0 10px 0;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 1.25rem;
+            color: #ffffff;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background-color: #0d1117;
+            border: 1px solid var(--border-color);
+            color: #ffffff;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: #ffffff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.secondary {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+
+        button.secondary:hover {
+            background-color: #21262d;
+            border-color: var(--text-muted);
+        }
+
+        .result-area {
+            background-color: #0d1117;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 16px;
+            min-height: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            color: var(--text-main);
+            margin-top: 10px;
+        }
+
+        .result-area.success {
+            border-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .result-area.error {
+            border-color: var(--error-color);
+            color: var(--error-color);
+        }
+        
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        footer {
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: 60px;
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Roblox Username Tools</h1>
+        <div class="subtitle">Check availability, generate cool names, and more.</div>
+    </header>
+
+    <!-- Specific Username Check -->
+    <div class="card">
+        <h2>Check Username Availability</h2>
+        <div class="input-group">
+            <input type="text" id="usernameInput" placeholder="Enter username...">
+            <button onclick="checkUsername()">Check</button>
+        </div>
+        <div id="checkResult" class="result-area">Results will appear here...</div>
+    </div>
+
+    <!-- Cool Username Generator -->
+    <div class="card">
+        <h2>Generate Cool Username</h2>
+        <p style="margin-bottom: 20px; color: var(--text-muted);">Generates a unique username using leetspeak, slang, and smart variations.</p>
+        <button onclick="generateCool()" class="secondary" style="width: 100%;">Generate New User</button>
+        <div id="coolResult" class="result-area" style="margin-top: 16px;">Click generate to start...</div>
+    </div>
+
+    <!-- Random Word Check -->
+    <div class="card">
+        <h2>Random Word Check</h2>
+        <p style="margin-bottom: 20px; color: var(--text-muted);">Get a random dictionary word and check if it's available.</p>
+        <button onclick="checkRandomWord()" class="secondary" style="width: 100%;">Get Random Word</button>
+        <div id="wordResult" class="result-area" style="margin-top: 16px;">Ready to fetch...</div>
+    </div>
+    
+    <footer>
+        <p>API Running on Localhost • Built with Node.js</p>
+    </footer>
+</div>
+
+<script>
+    async function checkUsername() {
+        const username = document.getElementById('usernameInput').value.trim();
+        const resultDiv = document.getElementById('checkResult');
+        
+        if (!username) {
+            resultDiv.innerText = "Please enter a username.";
+            resultDiv.className = "result-area error";
+            return;
+        }
+
+        resultDiv.innerText = "Checking...";
+        resultDiv.className = "result-area";
+
+        try {
+            const response = await fetch(`/api?username=${encodeURIComponent(username)}`);
+            const text = await response.text();
+            
+            resultDiv.innerText = text;
+            if (text.includes("AVAILABLE")) {
+                resultDiv.className = "result-area success";
+            } else {
+                resultDiv.className = "result-area error";
+            }
+        } catch (err) {
+            resultDiv.innerText = "Error: " + err.message;
+            resultDiv.className = "result-area error";
+        }
+    }
+
+    async function generateCool() {
+        const resultDiv = document.getElementById('coolResult');
+        resultDiv.innerText = "Generating... (this may take a moment)";
+        resultDiv.className = "result-area";
+        
+        try {
+            const response = await fetch('/api?cool=true');
+            const data = await response.json();
+            
+            resultDiv.innerText = JSON.stringify(data, null, 2);
+            if (data.available) {
+                resultDiv.className = "result-area success";
+            }
+        } catch (err) {
+            resultDiv.innerText = "Error: " + err.message;
+            resultDiv.className = "result-area error";
+        }
+    }
+
+    async function checkRandomWord() {
+        const resultDiv = document.getElementById('wordResult');
+        resultDiv.innerText = "Fetching...";
+        resultDiv.className = "result-area";
+        
+        try {
+            const response = await fetch('/api?word=true');
+            const data = await response.json();
+            
+            resultDiv.innerText = JSON.stringify(data, null, 2);
+            if (data.available) {
+                resultDiv.className = "result-area success";
+            }
+        } catch (err) {
+            resultDiv.innerText = "Error: " + err.message;
+            resultDiv.className = "result-area error";
+        }
+    }
+</script>
+
+</body>
+</html>
