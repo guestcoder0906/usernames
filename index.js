@@ -525,14 +525,9 @@ async function checkUsernameAvailability(usernameToTest) {
   let shouldRunDeepScan = true;
   const lowerUser = usernameToTest.toLowerCase();
   const safetyCheckResult = await isComposedOfSafeWords(lowerUser);
-  if (safetyCheckResult.isSafe) {
-    if (safetyCheckResult.hasBadWord) {
-      console.log("FAIL: Composed of real words, but component '" + safetyCheckResult.badWord + "' is on the ban list.");
-      return false;
-    } else {
-      console.log("SKIP: Username is composed entirely of safe dictionary words. Skipping deep scan.");
-      shouldRunDeepScan = false;
-    }
+  if (safetyCheckResult.isSafe && safetyCheckResult.hasBadWord) {
+    console.log("FAIL: Composed of real words, but component '" + safetyCheckResult.badWord + "' is on the ban list.");
+    return false;
   }
   if (shouldRunDeepScan) {
     if (await isProfaneDeepScan(usernameToTest)) {
