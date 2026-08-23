@@ -315,7 +315,7 @@ const SLANG_LIST = [
   "vsco_girl", "vultures", "w", "w_bracket", "w_mans", "w_rizz", "wack", "wakeupf1lthy",
   "wallflower", "wallhack", "wallstreetbets", "walter_white", "wano", "warden", "warm_take",
   "wasted", "wasted_money", "watch_party", "we_are_so_back", "we_move", "webcore", "wednesday",
-  "weird_flex_but_ok", "weird_flex", "champp" "weirdchamp", "whale", "whip", "who_is_this_diva", "who_let_him_cook",
+  "weird_flex_but_ok", "weird_flex", "champ", "weirdchamp", "whale", "whip", "who_is_this_diva", "who_let_him_cook",
   "let_him_cook_", "whole_meal", "wide_peppo", "wig", "wig_snatched", "wilbur", "wild", "wildin", "winning",
   "winter_arc", "witchcore", "wither", "wkwk", "wocky_slush", "slay", "wojak", "wok", "woke", "woofer",
   "world_record", "wsb", "wya", "wyd", "wylin", "xan", "xqc", "yaas", "yapper", "yapping",
