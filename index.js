@@ -4,290 +4,755 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-
-app.use(express.static('public')); // Serve static files from 'public' directory
+app.use(express.static('public')); 
 app.use(express.json());
 
+// Enable CORS so external websites/tools can query your API
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
 
 const ROBLOX_SECURITY_TOKEN = process.env.ROBLOX_SECURITY_TOKEN || "";
 
+// Standard Axios instance with timeout and headers
+const http = axios.create({
+  timeout: 3500,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': 'application/json'
+  }
+});
+
+// Leetspeak generation map (used when creating usernames)
 const LEET_MAP = {
   'a': ['4'],
-  'b': ['8', '13', 'l3', '6'],
+  'b': ['8', '13', '6'],
   'e': ['3'],
   'f': ['ph'],
   'g': ['6', '9'],
-  'i': ['1', 'l'],
-  'l': ['1', '7', 'l_'],
+  'i': ['1'], 
+  'l': ['1', '7'],
   'o': ['0'],
   'p': ['9'],
   'q': ['9', '2'],
-  'r': ['12', 'lz'],
+  'r': ['12'],
   's': ['5', 'z', '2'],
-  't': ['7', '1', 'l'],
+  't': ['7', '1'],
   'w': ['vv', 'uu'],
-  'x': ['ex', 'ecks'],
+  'x': ['ex'],
   'z': ['2']
 };
 
+// Explicit De-leet map for profanity scanning (Number -> Letter)
+const DELEET_MAP = {
+  '0': 'o',
+  '1': 'i',
+  '2': 'z',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '6': 'g',
+  '7': 't',
+  '8': 'b',
+  '9': 'g',
+  '$': 's',
+  '@': 'a'
+};
+
+const MULTI_DELEET = [
+  { pattern: '13', rep: 'b' },
+  { pattern: 'l3', rep: 'b' },
+  { pattern: '12', rep: 'r' },
+  { pattern: 'lz', rep: 'r' },
+  { pattern: 'ph', rep: 'f' },
+  { pattern: 'vv', rep: 'w' },
+  { pattern: 'uu', rep: 'w' }
+];
+
 // PURE SLANG / BRAINROT / MEME LIST
 const SLANG_LIST = [
-  // --- USER SPECIFIC REQUESTS ---
-  "labubu", "popmart", "hirono", "crybaby", "dimoo", "skullpanda", "zimomo", "kpopdemonhunters", "demon_hunter",
-  "tungtungsahur", "sahur", "bukber", "takjil", "lebaran", "thr", "bjir", "wkwk", "anjay", "bocil", "epep", "cilukba",
-  "kats_eye", "bk_foot_lettuce", "number_15",
-
-  // --- VIRAL PRODUCTS / TRENDS ---
-  "sonny_angel", "smiski", "owala", "stanley_cup", "coquette", "bows", "downtown_girl", "star_boy",
-  "luh_calm_fit", "tuff", "motion", "standing_on_business", "crash_out", "crashing_out", "hawk_tuah", "spit_on_that_thang",
-  "winter_arc", "lock_in", "locked_in", "typeshit", "type_shit", "fein", "not_like_us", "euphoria", "meet_the_grahams",
-  "matcha_latte", "oat_milk", "cold_brew", "sriracha", "baja_blast", "grimace_shake", "pink_sauce", "prime_drink",
-  "lunchly", "feastables", "mrbeast_bar", "takis", "hot_cheetos", "buldak", "samyang", "carbonara", "tanghulu",
-
-  // --- ANIME / MANHWA / CULT ---
-  "nah_id_win", "stand_proud", "domain_expansion", "infinite_void", "malevolent_shrine", "hollow_purple", "mahoraga",
-  "sukuna", "gojo", "toji", "geto", "solo_leveling", "jin_woo", "arise", "shadow_monarch", "bocchi", "rock",
-  "za_warudo", "kono_dio_da", "yare_yare", "bankai", "rasengan", "chidori", "dattebayo", "gear_5", "nika", "joyboy",
-  "shibuya_incident", "culling_game", "black_flash", "blue_lock", "isagi", "egoist", "bachira", "nagi", "barou",
-  "demon_slayer", "tanjiro", "nezuko", "zenitsu", "inosuke", "rengoku", "muzans", "akaza", "kokushibo", "yoriichi",
-  "chainsaw_man", "denji", "makima", "power", "aki", "pochita", "gun_devil", "control_devil", "spy_x_family", "anya",
-  "yor_forger", "loid_forger", "bond", "berserk", "guts", "griffith", "behelit", "eclipse", "dragonslayer", "brand_of_sacrifice",
-  "one_piece", "luffy", "zoro", "sanji", "nami", "usopp", "chopper", "robin", "franky", "brook", "jinbe", "kaido",
-  "shanks", "mihawk", "buggy", "cross_guild", "marineford", "wano", "egghead", "gear_2", "gear_3", "gear_4", "haki",
-  "evangelion", "shinji", "asuka", "rei", "unit_01", "nerv", "seele", "impact", "angel", "spear_of_longinus",
-
-  // --- BRAINROT / GEN ALPHA ---
-  "skibidi", "skibidi_toilet", "fanum", "fanum_tax", "gyatt", "gyat", "rizz", "rizzler", "sigma", "sigma_male", "ohio", "only_in_ohio",
-  "baby_gronk", "livvy_dunne", "mewing", "mog", "mogging", "looksmax", "looksmaxxing", "edging", "bussin",
-  "sheesh", "glaze", "glazing", "yapping", "yapper", "blud", "cuh", "jit", "shiesty", "opp", "opps", "zaza", "delulu", "solulu",
-  "sus", "amogus", "impostor", "baka", "sussy", "vented", "karen", "boomer", "zoomer", "ok_boomer", "no_cap", "fr", "ong",
-  "bet", "finna", "yeet", "yoink", "periodt", "slay", "ate", "left_no_crumbs", "main_character", "npc", "npc_energy", "bombastic",
-  "brain_rot", "doom_scrolling", "chronically_online", "ipad_kid", "sephora_kid", "stan_twitter", "plot_armor", "jump_scare",
-  "fever_dream", "backrooms", "liminal_space", "thug_shaker", "ambatukam", "omaygot", "dreamybull", "batman_arkham", "jonkler",
-  "man_ham", "killer_cock", "is_he_stupid", "lore_reason", "just_created", "character_name", "metal_pipe", "falling_pipe",
-  "vine_boom", "bruh_sound", "taco_bell_bong", "soda", "obamna", "biden_blast", "dark_brandon", "let_me_be_clear",
-  "chocolate_chocolate", "ice_cream", "bing_chilling", "lao_gan_ma", "john_xina", "social_credit", "wocky_slush", "oacky_way",
-
-  // --- GAMING TERMS (GENERAL) ---
-  "skill_issue", "diff", "jungle_diff", "top_diff", "mid_diff", "bot_frag", "top_frag", "touch_grass", "ggez", "get_gud",
-  "ratio", "l_ratio", "w_mans", "common_w", "rare_l", "rage_quit", "speedrun", "hax", "haxxor", "pwned", "rekt",
-  "aimbot", "wallhack", "spinbot", "admin_abuse", "permaban", "shadowban", "alt_account", "smurf", "inting", "feeding",
-  "trolling", "griefing", "spawn_peek", "one_tap", "clip_it", "clipped", "caught_in_4k", "pocket_sage", "battle_pass",
-  "clutch", "ace", "penta_kill", "quadra_kill", "triple_kill", "double_kill", "first_blood", "killing_spree", "godlike",
-  "legendary", "shutdown", "executed", "wasted", "busted", "mission_passed", "respect_plus", "wasted_money", "heist",
-  "rank_up", "derank", "hardstuck", "elo_hell", "matchmaking", "rng", "rng_gods", "gacha", "pity", "fifty_fifty",
-  "whale", "dolphin", "f2p", "p2w", "grind", "farming", "afk", "brb", "gtg", "omw", "npc_interaction", "dialogue_skipper",
-  "speedrunner", "tas", "glitchless", "any_percent", "softlock", "hardlock", "crash", "blue_screen", "lag", "ping",
-  "packet_loss", "rubber_band", "server_issue", "devs_lazy", "indie_dev", "aaa_game", "bug", "feature", "patch_notes",
-  "nerf", "buff", "rework", "balance", "meta", "off_meta", "cheese", "strat", "tactics", "callouts", "comms",
-
-  // --- ROBLOX SPECIFIC ---
-  "bloxy", "devex", "dominus", "valkyrie", "headless", "korblox", "limiteds", "adopt_me", "brookhaven", "bloxburg", "bedwars",
-  "da_hood", "arsenal", "phantom_forces", "pet_sim", "psx", "pet_sim_99", "titanic", "huge", "exclusive", "shiny", "rainbow",
-  "dark_matter", "golden", "diamond", "emerald", "obsidian", "void", "hacked", "beamed", "cookie_logged", "pged", "poisoned",
-  "clean", "rap", "value", "demand", "projection", "flipping", "snipping", "botting", "trade_hangout", "mm2", "murder_mystery",
-  "sheriff", "murderer", "innocent", "godly", "chroma", "ancient", "vintage", "corrupt", "luger", "shark", "slasher", "heat",
-  "laser", "fang", "saw", "seer", "gem", "coin", "prestige", "rebirth", "leaderboard", "obby", "tower_of_hell", "toh",
-  "misery", "jukes_towers", "citadel", "steeple", "difficulty_chart", "parkour", "shift_lock", "flick", "wall_hop", "ladder_flick",
-  "corner_clip", "laugh_clip", "dance_clip", "glitch_wrap", "stud", "truss", "conveyor", "killbrick", "checkpoint", "stage",
-  "tycoon", "dropper", "upgrader", "conveyor_belt", "cash_grab", "simulator", "clicking", "tapping", "mining", "lifting",
-  "boxing", "fighting", "anime_defenders", "toilet_tower", "ttd", "all_star", "astd", "bloxfruits", "kitsune", "leopard",
-  "dragon", "spirit", "control", "venom", "shadow", "dough", "t_rex", "mammoth", "gravity", "blizzard", "pain", "rumble",
-  "portal", "phoenix", "sound", "spider", "love", "buddha", "quake", "magma", "ghost", "barrier", "rubber", "light",
-  "diamond_fruit", "dark_fruit", "sand", "ice", "falcon", "flame", "spike", "smoke", "bomb", "spring", "chop", "spin",
-  "rocket", "perm", "permanent", "gamepass", "fruit_notif", "dark_blade", "yig", "cdk", "cursed_dual", "soul_guitar",
-  "ghoul", "cyborg", "mink", "human", "shark_race", "angel_race", "v4", "awakening", "raid", "fragment", "beli",
-
-  // --- VALORANT / SHOOTERS ---
-  "jett", "reyna", "sage", "omen", "phoenix", "raze", "sova", "cypher", "brimstone", "viper", "killjoy", "skye", "yoru",
-  "astra", "kayo", "chamber", "neon", "fade", "harbor", "gekko", "deadlock", "iso", "clove", "radiant", "immortal",
-  "ascendant", "diamond", "platinum", "gold", "silver", "bronze", "iron", "tenz", "faker", "shroud", "tarik", "aceu",
-  "i_miss_her", "precise_gunplay", "run_and_gun", "spray_and_pray", "lineups", "nerd_lineups", "grim_walls", "rat",
-  "corner_camper", "judge", "odin", "operator", "op_crutch", "vandal", "phantom", "sheriff_demon", "deagle", "awp",
-  "rush_b", "plant_the_bomb", "defuse", "ninja_defuse", "save", "eco", "force_buy", "full_buy", "hero_buy", "glass_cannon",
-
-  // --- MINECRAFT / SANDBOX ---
-  "creeper", "aw_man", "steve", "alex", "herobrine", "notch", "jeb", "dinnerbone", "dream", "georgenotfound", "sapnap",
-  "technoblade", "philza", "tommyinnit", "tubbo", "ranboo", "wilbur", "manhunt", "speedrunner_vs", "hunter", "ender_dragon",
-  "wither", "warden", "ancient_city", "netherite", "diamond_armor", "enchanted", "mending", "sharpness", "protection",
-  "unbreaking", "efficiency", "fortune", "silk_touch", "looting", "infinity", "flame", "punch", "knockback", "thorns",
-  "elytra", "shulker", "totem", "raid_farm", "iron_farm", "villager", "trading_hall", "zombie", "skeleton", "enderman",
-  "spider", "cave_spider", "slime", "magma_cube", "ghast", "blaze", "piglin", "hoglin", "strider", "phantom_mob",
-
-  // --- VIRAL NAMES / ENTITIES / MEMES ---
-  "duolingo", "mrbeast", "ishowspeed", "kai_cenat", "xqc", "hasbulla", "gigachad", "andrew_tate", "top_g", "matrix", "escape_matrix",
-  "hustlers_university", "quandale", "dingle", "goofy_ahh", "uncle_prod", "morbius", "morb", "morbillion", "shrek", "doge", "cheems",
-  "pepe", "monkaw", "kekw", "pog", "poggers", "weirdchamp", "monkas", "malding", "seething", "soyjak", "chad",
-  "wojak", "doomer", "bloomer", "trad", "based", "cringe", "red_pilled", "blue_pilled", "black_pilled", "rug_pull", "diamond_hands",
-  "paper_hands", "to_the_moon", "hodl", "stonks", "dogecoin", "elon_musk", "sub_to_pewdiepie", "tseries", "pewdiepie", "oi_hughie", "homelander", "starlight", "vought", "the_boys", "compound_v", "temp_v", "butcher",
-  "soldier_boy", "black_noir", "deep", "a_train", "translucent", "stormfront", "firecracker", "sister_sage", "tek_knight",
-  "breaking_bad", "walter_white", "heisenberg", "jesse_pinkman", "saul_goodman", "better_call_saul", "gus_fring", "los_pollos",
-  "mike_ehrmantraut", "kid_named_finger", "chicanery", "tuco", "lalo", "salamanca", "nacho", "howard_hamlin", "kim_wexler",
-  "patrick_bateman", "american_psycho", "sigma_grindset", "paul_allen", "dorsia", "sea_urchin", "business_card", "bone",
-  "silian_rail", "pale_nimbus", "fight_club", "tyler_durden", "narrator", "project_mayhem", "first_rule", "soap",
-  "ryan_gosling", "drive", "blade_runner", "ken", "barbie", "oppenheimer", "barbenheimer", "cillian_murphy", "florence_pugh",
-  "taylor_swift", "swiftie", "eras_tour", "travis_kelce", "chiefs", "nfl", "superbowl", "halftime", "beyonce", "renaissance",
-  "kanye", "ye", "yeezy", "vultures", "carnival", "playboi_carti", "vamp", "ken_carson", "destroy_lonely",
-  "homixide_gang", "f1lthy", "wakeupf1lthy", "metro_boomin", "future", "drake", "kendrick", "lamar", "j_cole", "big_3",
-
-  // --- PHRASES (COMPLEX UNDERSCORE LOGIC APPLIES HERE) ---
-  // NOTE: Phrases over 20 chars have been shortened or removed to ensure validity.
-  "bombastic_side_eye", "criminal_side_eye", "vibe_check", "aura_farming", "aura_points", "negative_aura", "plus_aura",
-  "emotional_damage", "villain_arc", "canon_event", "core_memory", "pov_you", "down_bad", "caught_lacking", "gatekeep", "gaslight",
-  "girlboss", "pick_me", "side_eye", "let_him_cook", "who_let_him_cook", "bro_visited", "bro_thinks_he",
-  "situation_ship", "love_bombing", "trauma_dump", "girl_math", "boy_math", "math_aint_mathing",
-  "shadow_wizard", "money_gang", "casting_spells", "legalize_bombs", "nuclear_bomb", "hydrogen_baby", "coughing_baby",
-  "main_character", "protagonist", "antagonist", "redemption_arc", "training_arc", "beach_episode", "filler_episode",
-  "happy_cake_day", "edit_thanks", "kind_stranger", "reddit_gold", "discord_mod", "kitten", "discord_kitten", "nitro",
-  "server_boost", "general_chat", "slow_mode", "touch_grass", "go_outside", "vitamin_d", "sunlight", "shower", "deodorant",
-
-  // --- AESTHETICS / CORES ---
-  "cottagecore", "goblincore", "fairycore", "weirdcore", "dreamcore", "traumacore", "glitchcore", "webcore", "oldweb",
-  "frutiger_aero", "y2k", "cyberpunk", "steampunk", "dieselpunk", "solarpunk", "vaporwave", "synthwave", "retrowave",
-  "dark_academia", "light_academia", "balletcore", "barbiecore", "bimbocore", "normcore", "gorpcore", "blokecore",
-  "angelcore", "devilcore", "clowncore", "kidcore", "lovecore", "royalcore", "spacecore", "witchcore", "zombiecore",
-
-  // --- FOOD & DRINK (SLANGIFIED) ---
-  "choccy_milk", "nuggies", "tendies", "chimken", "borgar", "pizza_rolls", "bagel_bites", "hot_pocket", "ramen_noodles",
-  "cup_noodles", "maruchan", "shin_ramyun", "boba_tea", "bubble_tea", "tapioca", "taro", "brown_sugar", "fruit_tea",
-  "monster_energy", "red_bull", "celsius", "gfuel", "gamersupps", "mountain_dew", "doritos", "cheetos", "funyuns",
-  "takis_fuego", "blue_heat", "nitro_pepsi", "pilk", "mug_root_beer", "lean", "purple_drank", "sizzurp", "wok",
-
-  // --- ANIMALS / CREATURES ---
-  "doggo", "pupper", "woofer", "floof", "good_boy", "zoomies", "sploot", "blep", "mlem", "beans", "toe_beans",
-  "catto", "kitten", "void_cat", "orange_cat", "one_brain_cell", "loaf", "liquid_cat", "if_i_fits", "i_sits",
-  "sneks", "danger_noodle", "nope_rope", "boop_snoot", "trash_panda", "racoon", "possum", "ferret", "cat_snake",
-  "capybara", "ok_i_pull_up", "coconut_doggy", "frogge", "phrog", "wednesday", "my_dudes", "axolotl", "minecraft_axolotl",
-  "blue_lobster", "jumpscare", "shark_pup", "blahaj", "ikea_shark", "trans_icon", "spinny_fish", "chip_spin",
-
-  // --- CODING / TECH (NERD SLANG) ---
-  "spaghetti_code", "rubber_duck", "hello_world", "foo_bar", "lorem_ipsum", "syntax_error", "segfault", "null_pointer",
-  "index_out_of", "infinite_loop", "stack_overflow", "git_push", "git_pull", "git_commit", "force_push", "merge_conflict",
-  "sudo", "root", "admin", "localhost", "127_0_0_1", "404_not_found", "500_error", "ddos", "botnet", "script_kiddie",
-  "hackerman", "mainframe", "firewall", "proxy", "vpn", "tor", "dark_web", "bitcoin", "crypto", "ethereum", "blockchain",
-  "nft", "right_click", "save_as", "screenshot", "minting", "gas_fees", "rug_pull", "pump_and_dump", "diamond_hands",
-  "paper_hands", "hodl", "to_the_moon", "rocket_emoji", "stonks", "not_stonks", "wsb", "wallstreetbets", "ape_together",
-
-  // --- MISC FUNNY / RANDOM ---
-  "uwu", "owo", "uwu_girl", "gamer_girl", "egirl", "eboy", "pick_me_boy", "soft_boy", "golden_retriever", "black_cat",
-  "zodiac", "astrology", "mercury", "retrograde", "gemini", "scorpio", "leo", "libra", "virgo", "aries", "taurus",
-  "cancer", "pisces", "aquarius", "capricorn", "sagittarius", "crystal_girl", "manifesting", "lucky_girl", "syndrome",
-  "affirmations", "red_flag", "green_flag", "beige_flag", "ick", "turn_off", "deal_breaker", "ghosting", "zombieing",
-  "breadcrumbing", "benching", "cushioning", "orbiting", "haunting", "roaching", "pocketing", "stashing", "love_bomb",
-  "twin_flame", "soulmate", "karmic", "situationship", "friends_w_benefits", "fwb", "nsa", "dtr", "define_relationship",
-  "hard_launch", "soft_launch", "boyfriend_reveal", "girlfriend_reveal", "engagement", "divorce", "alimony", "child_support"
+  "aaa_game", "aave", "abbreviation", "absolute_cinema", "ace", "aceu", "acoustic", "acronym",
+  "acting_brand_new", "addy", "admin", "admin_abuse", "adopt_me", "adulting", "aesthetic",
+  "affirmations", "afk", "aimbot", "air_fryer", "akaza", "alex", "alimony", "all_fax_no_printer",
+  "all_star", "allat", "alpha", "alpha_male", "alt_account", "american_psycho", "amirite", "amogus",
+  "amped", "ancient", "ancient_city", "and_did", "and_i_oop", "andrew_tate", "angel", "angel_race",
+  "angelcore", "anime_defenders", "anjay", "antagonist", "any_percent", "anya", "ape_together",
+  "aquarius", "aries", "arise", "arsenal", "ascendant", "asl", "asmr", "astd", "astra", "astrology",
+  "asuka", "ate", "ate_and_left_no_crumbs", "ate_down", "audacity", "aura", "aura_farming",
+  "aura_loss", "aura_points", "aw_man", "awakening", "awp", "axolotl", "baby_girl", "baby_gronk",
+  "bachira", "backrooms", "baddie", "baddie_core", "bae", "bag_chaser", "bagel_bites", "baja_blast",
+  "baka", "balletcore", "bandwagon", "bankai", "barbenheimer", "barbie", "barbiecore", "barou",
+  "barrier", "base", "based", "based_department", "basic", "batman_arkham", "battle_pass", "bb",
+  "bbg", "beans", "beast_mode", "bed_rot", "bedwars", "beefing", "behelit", "beige_flag", "beli",
+  "benching", "berserk", "bestie", "bestie_vibes", "bet", "better_call_saul", "beyonce", "bffr",
+  "bfr", "biblically_accurate", "biden_blast", "big", "big_back", "big_back_energy", "big_brain",
+  "big_cap", "big_dog", "big_flex", "big_mad", "big_moves", "big_sad", "big_three", "big_w",
+  "big_yikes", "slay", "bimbocore", "bing_chilling", "bingewatch", "bird_brain", "bite_me",
+  "bitcoin", "bjir", "black_cat", "black_cat_energy", "black_flash", "black_noir", "black_pilled",
+  "blahaj", "blade_runner", "blast_off", "blaze", "blep", "blind_spot", "blissed_out", "blizzard",
+  "blockchain", "blokecore", "bloomer", "bloxburg", "bloxfruits", "bloxy", "blue_heat", "blue_lobster",
+  "blue_lock", "blue_pilled", "blue_screen", "blud", "blueprint", "boba_tea", "bocil", "bocchi",
+  "boi", "bomb", "bombastic", "bombastic_side_eye", "bomboclat", "bone", "bonk", "boo", "bood_up",
+  "boomer", "energy", "boomer_energy", "boop", "snoot", "bootleg", "bop", "borgar", "bot_frag", "botnet",
+  "botting", "boujee", "bougie", "boutta", "bows", "boxing", "boy_math", "boyfriend_air",
+  "boyfriend_reveal", "brain_fog", "brain_rot", "brainworm", "brand_of_sacrifice", "brat",
+  "brat_green", "brat_summer", "breadcrumbing", "break_the_internet", "breaking_bad", "brick",
+  "brimstone", "bro_code", "bro_really_thought", "bro_thinks_he", "bro_visited", "bronze", "brook",
+  "brookhaven", "bros", "brother_eww", "brown_sugar", "bruh", "bruh_moment", "bruh_sound", "bruv",
+  "bubble_tea", "buddha", "buff", "buffed", "bug", "buggy", "bukber", "buldak", "business_card",
+  "bussin", "busted", "butcher", "buttah", "butter_face", "bye_felicia", "cake", "caked_up",
+  "callouts", "cancel", "cancel_culture", "canceled", "cancer", "canon", "canon_event", "cap",
+  "cap_detector", "capper", "capricorn", "capybara", "carbonara", "carnival", "cash", "cash_grab",
+  "cash_money", "casting_spells", "catch_fade", "catch_feels", "catch_these_hands", "catfish",
+  "cat_snake", "catto", "caught_in_four_k", "caught_in_k", "caught_lacking", "cave_spider", "cdk",
+  "celsius", "ceo_of", "chad", "chadette", "chainsaw_man", "chamber", "character_arc",
+  "character_name", "chat", "chat_is_this_real", "check_the_vibes", "cheeking", "cheerleader_effect",
+  "cheese", "cheems", "cheetos", "chef_kiss", "cheugy", "chicanery", "chidori", "chiefs",
+  "child_support", "chill", "chill_pill", "chilling", "chimken", "chip_spin", "chlorine",
+  "choppelganger", "chopped", "chop", "chopper", "chroma", "chud", "chudding", "chudjak", "cilukba",
+  "cillian_murphy", "cinema", "cinematic_masterpiece", "citadel", "clapped", "clapback", "clean",
+  "clean_girl", "clean_girl_aesthetic", "clicking", "clip_farming", "clip_it", "clipped", "clock",
+  "clock_that", "clock_tea", "clocking", "clout", "clout_chaser", "clove", "clown_behavior",
+  "clowncore", "clutch", "coconut_doggy", "coded", "coffee_badging", "coin", "cold_brew",
+  "cold_take", "common_l", "common_w", "comms", "compound_v", "consoomer", "control",
+  "control_devil", "conveyor", "conveyor_belt", "cook", "cooked", "coop", "coquette", "core",
+  "core_memory", "corner_camper", "corner_clip", "corrupt", "cottagecore", "couch_potato",
+  "coughing_baby", "coworker_core", "crab_mentality", "crah", "crash", "crash_out", "crashing_out",
+  "cray_cray", "creeper", "criminal_side_eye", "cringe", "cringe_comp", "cringe_fest", "cringey",
+  "cross_guild", "crumb", "crunchy", "crybaby", "crypto", "crystal_girl", "cuh", "culling_game",
+  "cup_noodles", "cushioning", "cyberpunk", "cyborg", "cypher", "da_hood", "dab", "daily_grind",
+  "danger_noodle", "dank", "dank_memes", "dap", "dap_up", "dark_academia", "dark_blade",
+  "dark_brandon", "dark_fruit", "dark_matter", "dark_web", "dattebayo", "daughter_tax", "day_one",
+  "dayroom", "ddos", "dead", "dead_internet", "deadass", "deadlock", "deagle", "deal_breaker",
+  "death_stare", "deep_fried", "defuse", "delulu", "delulu_is_the_solulu", "demand", "demon_hunter",
+  "demon_slayer", "denji", "derank", "derp", "destroy_lonely", "devex", "devs_lazy", "dialed_in",
+  "dialogue_skipper", "diamond", "diamond_armor", "diamond_fruit", "diamond_hands", "dieselpunk",
+  "diff", "difficulty_chart", "dih", "dimoo", "dingle", "dinnerbone", "dip", "dirtbag", "discord_mod",
+  "discourse", "divorce", "dl", "dog_water", "doge", "dogecoin", "doggo", "dogwater", "doing_numbers",
+  "doing_the_most", "dolphin", "domain_expansion", "dominance", "dominus", "done", "done_dirty",
+  "donk", "dont_let_him_cook", "doom_scrolling", "doomer", "dope", "doritos", "dorsia", "double_down",
+  "double_kill", "double_tap", "dough", "down_bad", "down_tremendous", "downtown_girl", "dox",
+  "doxed", "drag", "dragged", "dragon", "dragonslayer", "drainer", "drake", "draking", "dream",
+  "dreamcore", "drip", "drip_check", "dripped_out", "drive", "dropper", "dry_texting", "dtr",
+  "dub", "duolingo", "dupe", "dynamite", "eat", "eat_it_up", "eating_glass", "eboy", "eclipse",
+  "eco", "edgelord", "edit_thanks", "eepy", "efficiency", "egghead", "egirl", "elon_musk",
+  "elo_hell", "elytra", "emerald", "eminem", "emo", "emotional_damage", "enchanted", "ender_dragon",
+  "enderman", "energy_vampire", "engagement", "engagement_farming", "epep", "epic_fail", "era",
+  "eras_tour", "ers", "escape_matrix", "etc", "ethereum", "euphoria", "evangelion", "exclusive",
+  "executed", "f_in_the_chat", "f_to_pay_respects", "facts", "fade", "faded", "fail_comp",
+  "fairycore", "fake_deep", "fake_flex", "fake_news", "faker", "falcon", "falling_pipe", "fam",
+  "fambushing", "family_guy_pipeline", "fan_behavior", "fan_service", "fanum", "fanum_tax",
+  "farming", "fast_fashion_fatigue", "fat_l", "favourite", "fb", "feastables", "feeding", "fein",
+  "ferret", "fever_dream", "ffa", "fifty_fifty", "fight_club", "fighting", "filler_episode",
+  "finsta", "finna", "finesse", "fire", "firecracker", "firewall", "first_blood", "first_rule",
+  "fit", "fit_check", "fit_pic", "five_hundred_error", "flame", "flavored_air", "fleek", "flex",
+  "flex_culture", "flex_on_them", "flex_time", "flexin", "flexing", "flexitarian", "flick",
+  "flipping", "floof", "flop", "flop_era", "florence_pugh", "fly_fit", "fomo", "foo_bar",
+  "force_buy", "force_push", "forty_one", "fortune", "four_o_four_coded", "four_o_four_not_found",
+  "four_plus_four", "fragment", "franky", "freak", "freak_mode", "freaky", "free_fire", "frogge",
+  "fruit_notif", "fruit_tea", "fruity", "frutiger_aero", "ftw", "fudge", "fuel_the_fire",
+  "fuhuhluhtoogan", "full_blown", "full_buy", "full_send", "funyuns", "furry", "future", "fyp",
+  "g", "gacha", "game_is_game", "game_recognize_game", "gamepass", "gamer_girl", "gamersupps",
+  "gang", "gas", "gas_fees", "gaslight", "gaslighting", "gassing", "gatekeep", "gd", "gear_five",
+  "gear_four", "gear_three", "gear_two", "geeking", "gekko", "gem", "gemini", "general_chat",
+  "generational_trauma", "georgenotfound", "get_a_room", "get_bag", "get_gud", "get_in_line",
+  "get_money", "get_real", "get_rekt", "get_served", "get_to_the_bag", "get_wrecked", "geto",
+  "gfuel", "gg", "ggez", "ghast", "ghost", "ghosted", "ghosting", "ghoul", "gig_economy",
+  "gigachad", "girl_dinner", "girl_math", "girlboss", "girlfriend_air", "girlfriend_reveal",
+  "giving_me_life", "giving_what_it_needed_to_give", "glass_cannon", "glaze", "glazer", "glazing",
+  "glitch_wrap", "glitchcore", "glitchless", "glow_down", "glow_up", "go_bananas", "go_dummy",
+  "go_hard", "go_off", "go_outside", "goat", "goated", "goblincore", "godlike", "godly", "gojo",
+  "golden", "golden_retriever", "golden_retriever_energy", "gold", "good_game", "good_look",
+  "good_vibes_only", "goofy_ahh", "gorpcore", "got_hands", "grandpa_core", "granola", "granola_girl",
+  "gravity", "gremlin_mode", "green_flag", "green_fn", "griefing", "griffith", "grim_walls",
+  "grimace_shake", "grind", "grindset", "groovy", "gtg", "guap", "gucci", "gun_devil", "gus_fring",
+  "guts", "gyat", "gyatt", "hackerman", "hacked", "haki", "half_baked", "halftime", "hammered",
+  "hand_check", "hard_launch", "hard_pass", "hardlock", "hardstuck", "harbor", "hasbulla",
+  "hate_watching", "hater_energy", "haunting", "hawk_tuah", "hax", "haxxor", "headcanon",
+  "headless", "heart_eyes", "heat", "heated", "heavy_metal", "heem", "heisenberg", "heist",
+  "hella", "hella_skrilla", "hello_world", "herobrine", "hero_buy", "hidden_gem", "high_key",
+  "highkey", "highlighter_kid", "hirono", "hits_different", "hoco", "hodl", "hoglin",
+  "hollow_purple", "hollywood", "homelander", "homixide_gang", "hop_off", "hot_cheetos", 
+  "hot_mess", "hot_pocket", "hot_take", "howard_hamlin", "htn", "huge", "human", "hunter", "hunty", 
+  "hustle_culture", "hustlers_university", "emo", 
+  "hydrogen_baby", "hype", "hype_beast", "hype_man", "hype_train", "hyperpop", "i_fear",
+  "i_miss_her", "i_sits", "i_swear_on_everything", "ick", "icymi", "if_i_fits", "igl", "ikea_shark",
+  "immortal", "impact", "impostor", "in_my_bag", "in_my_era", "in_my_feelings", "in_the_trenches",
+  "indie_dev", "indie_sleaze", "index_out_of", "infinite_loop", "infinite_void", "infinity",
+  "inosuke", "insane_work", "inting", "ipad_kid", "iron", "iron_farm", "ironic_posting",
+  "is_he_stupid", "isagi", "ishowspeed", "iso", "it_be_like_that", "its_giving", "iwel", "iykwim",
+  "iykyk", "j_cole", "jawn", "jeb", "jesse_pinkman", "jett", "jinbe", "jin_woo", "jittleyang",
+  "jit", "john_xina", "jojos", "jomo", "jonkler", "joyboy", "judge", "jukes_towers", "jumpscare",
+  "jungle_diff", "just_created", "just_vibing", "juul", "juuling", "kaido", "kai_cenat", "kanye",
+  "karen", "karmic", "kats_eye", "kayo", "kda", "keep_it_a_buck", "keep_it_one_hundred",
+  "keep_it_real", "kekw", "ken", "ken_carson", "kendrick", "kick_rocks", "kid_named_finger",
+  "kidcore", "killbrick", "killer_cock", "killing_spree", "killjoy", "kim_wexler", "kind_stranger",
+  "kiss_my_teeth", "kitsune", "kitten", "kms", "knockback", "kokushibo", "kono_dio_da", "korblox",
+  "kpopdemonhunters", "krunk", "l", "l_bracket", "l_mans", "l_plus_ratio", "l_ratio",
+  "labubu", "ladder_flick", "lag", "lalo", "lamar", "lao_gan_ma", "larp", "larper", "larping",
+  "laser", "laugh_clip", "lb", "leaderboard", "lean", "lean_in", "lebaran", "left_no_crumbs",
+  "left_on_delivered", "left_on_read", "legendary", "legit", "leo", "leopard", "let_him_cook",
+  "let_me_be_clear", "let_them_cook", "lets_get_this_bread", "level_up", "lewk", "libra", "lifting",
+  "light", "light_academia", "lightwork", "like_a_boss", "like_my_recent", "liminal_space",
+  "limiteds", "lineups", "liquid_cat", "lit", "live", "living", "living_for_it",
+  "living_my_best_life", "livvy_dunne", "lmao", "lmfao", "lms", "loaf", "localhost", "lock_in",
+  "locked_in", "loid_forger", "lol", "look_at_me", "lookin_like_a_snack", "looksmax", "looksmaxxing",
+  "looting", "lore_reason", "lorem_ipsum", "los_pollos", "lose_your_aura", "loud_budgeting",
+  "love", "love_bomb", "love_bombing", "love_language", "lovecore", "low_hanging_fruit", "low_key",
+  "low_profile", "low_taper_fade", "lowkey", "lucky_girl", "lucky_girl_syndrome", "luger",
+  "luh_calm_fit", "lunchly", "mad", "mad_respect", "mafia_boss", "magma", "magma_cube", "mahoraga",
+  "main_character", "main_character_energy", "main_character_syndrome", "mainframe", "major_w",
+  "major_yikes", "makima", "malding", "malevolent_shrine", "mammoth", "man_ham", "manhunt",
+  "manifest", "manifesting", "maruchan", "marineford", "matcha_latte", "matchmaking",
+  "math_aint_mathing", "matrix", "meet_the_grahams", "megathread", "melting", "mending", "menty_b",
+  "mercury", "mercury_retrograde", "merge_conflict", "metal_pipe", "method_acting", "metro_boomin",
+  "mew", "mewing", "mid", "mid_diff", "mihawk", "mike_ehrmantraut", "mindfulness",
+  "minecraft_axolotl", "mining", "mink", "minting", "misery", "miss_me_with_that", "mission_passed",
+  "mlem", "mm_two", "mob_psycho", "mog", "mogged", "mogger", "mogging", "money_bag",
+  "money_counter", "money_gang", "money_moves", "monkas", "monkaw", "monster_energy", "mood",
+  "mood_board", "mooning", "morbius", "morbillion", "morning_routine", "motion", "mountain_dew",
+  "mouse_moments", "movie_magic", "mrbeast", "mrbeast_bar", "mug_root_beer", "murder_mystery",
+  "murderer", "mushroom_soup", "muzans", "my_bad", "my_dudes", "my_fault", "my_guy",
+  "my_lil_yea_yea", "nacho", "nagi", "nah_fr", "nah_id_win", "nami", "narrative", "narrator",
+  "negative_aura", "negative_ghostrider", "neon", "nerd_alert", "nerd_lineups", "nerf", "nerv",
+  "netherite", "netzwerk", "neurodivergent_coded", "neurospicy", "never_let_them_know_your_next_move",
+  "nezuko", "nfl", "nft", "ngl", "nika", "ninja_defuse", "nitro", "nitro_pepsi", "no_cap",
+  "no_chill", "no_context", "no_drama", "no_filter", "no_home", "no_lies_detected", "no_new_friends",
+  "no_optics", "no_questions_asked", "no_receipts", "no_tea_no_shade", "no_way_bro", "nope_rope",
+  "normcore", "normie", "not_giving", "not_gonna_lie", "not_hot", "not_it", "not_like_us",
+  "not_stonks", "notch", "npc", "npc_behavior", "npc_energy", "npc_interaction", "nuclear_bomb",
+  "nuggies", "null_pointer", "number_fifteen", "oacky_way", "oat_milk", "obamna", "obby",
+  "obsidian", "odin", "off_it", "off_meta", "off_the_chain", "off_the_grid", "off_the_meter",
+  "off_the_rip", "off_the_wall", "offline_core", "og", "og_status", "ohio", "ohio_final_boss",
+  "oi_hughie", "ok_boomer", "ok_i_pull_up", "okay_boomer", "okay_geeze", "old_money",
+  "old_money_aesthetic", "oldweb", "omaygot", "omg", "oml", "omen", "omw", "on_brand", "on_deck",
+  "on_fleek", "on_game", "on_god", "on_my_mama", "on_point", "on_sight", "on_the_low",
+  "one_brain_cell", "one_piece", "one_tap", "one_time_for_the_one_time", "ong", "only_in_ohio",
+  "oof", "oomf", "oomfie", "open_mic", "operator", "op_crutch", "opp", "oppenheimer", "opps",
+  "ops", "orange_cat", "orbiting", "order_sixty_six", "ost", "otp", "out_of_pocket",
+  "out_unbothered", "outta_here", "outta_pocket", "owala", "owo", "pack_watch", "pack_your_bags",
+  "packet_loss", "pain", "pale_nimbus", "panicking", "paper_hands", "parched", "parkour",
+  "passing_the_vibe_check", "patch_notes", "patrick_bateman", "paul_allen", "penta_kill", "pepe",
+  "period", "periodt", "perm", "permanent", "permaban", "perry_the_platypus", "pet_sim",
+  "pet_sim_ninety_nine", "petty", "petty_energy", "pewdiepie", "pged", "phantom", "phantom_forces",
+  "phantom_mob", "phantom_tax", "philza", "phoenix", "phrog", "pick_me", "pick_me_boy",
+  "pick_me_girl", "picture_me_rolling", "piglin", "pilk", "ping", "pink_sauce", "pipe_down",
+  "pisces", "pity", "pixel_art", "pizza_rolls", "plant_the_bomb", "platinum", "play_stupid_games",
+  "playboi_carti", "plink", "plot_armor", "plot_twist", "plug", "plug_talk", "plus_aura",
+  "pmoys", "pocket_sage", "pocketing", "pochita", "pog", "poggers", "point_of_view", "poisoned",
+  "polite_cat", "pop_off", "pop_out", "popmart", "portal", "possum", "post_irony", "pov",
+  "pov_you", "power", "power_hour", "power_move", "precise_gunplay", "preppy", "pressed",
+  "prestige", "pretty_privilege", "prime_drink", "project_mayhem", "projection", "protection",
+  "protagonist", "protest_vote", "proxy", "psx", "pulled", "pulling", "pump_and_dump", "punch",
+  "pupper", "purple_drank", "pushing_p", "put_in_work", "put_on_blast", "pwn", "pwned", "p2w",
+  "quadra_kill", "quandale", "quandale_dingle", "quick_maths", "quiet_cutting", "quiet_firing",
+  "quiet_luxury", "quiet_quitting", "rage_bait", "rage_quit", "raid", "raid_farm", "rainbow",
+  "ramen_noodles", "ranboo", "rank_up", "rap", "rare_l", "rare_w", "rasengan", "rat",
+  "rat_girl_summer", "rat_mode", "ratchet", "ratio", "ratioed", "rawr", "raze",
+  "real_eyes_realize", "real_one", "real_real", "real_talk", "rebirth", "receipts", "red_bull",
+  "red_flag", "red_pill", "red_pilled", "redemption_arc", "reddit_gold", "reggae_ton", "rei",
+  "rekt", "renaissance", "rengoku", "rent_free", "respect_fully", "respect_plus", "retrograde",
+  "retrowave", "reveal_arc", "reverse_card", "rework", "reyna", "rich_in_life", "right_click",
+  "rip", "rip_bozo", "rip_me", "rizz", "rizz_god", "rizzler", "rn", "roaching", "roast", "robin",
+  "rock", "rocket", "rocket_emoji", "roll_up", "rolling_in_it", "roman_empire", "root", "rot",
+  "rot_maxxing", "rotflmao", "royalcore", "rpg", "rubber", "rubber_band", "rubber_duck",
+  "rug_pull", "rumble", "run_and_gun", "run_it_back", "run_that_back", "rush_b", "ryan_gosling",
+  "sacred_timeline", "sad_boy", "sad_girl", "safari_park", "sage", "sagittarius", "sahur",
+  "salad_fingers", "salamanca", "salty", "same_energy", "samyang", "sand", "sanji", "sapnap",
+  "saul_goodman", "savage", "save", "save_as", "saw", "say_less", "scammer", "scammer_energy",
+  "scared_straight", "scorpio", "screenshot", "script_kiddie", "sea_urchin",
+  "second_hand_embarrassment", "secret_sauce", "seele", "seething", "segfault", "sending_me",
+  "sephora_kid", "server_boost", "server_issue", "serving", "serving_looks", "shade", "shadow",
+  "shadow_monarch", "shadow_wizard", "shadowban", "shanks", "shark", "shark_pup", "shark_race",
+  "sharpness", "sheesh", "sheriff", "sheriff_demon", "shibuya_incident", "shiesty", "shift_lock",
+  "shin_ramyun", "shinji", "shiny", "ship", "shoe_game", "shook", "shooketh", "shooting_your_shot",
+  "short_king", "shorty", "shot_caller", "shoulder_check", "shroud", "shulker", "shutdown",
+  "sick", "side_character", "side_eye", "side_hustle", "side_quest", "sigma", "sigma_fein",
+  "sigma_grindset", "sigma_male", "sigma_rizz", "silian_rail", "silk_touch", "silver", "simulator",
+  "simp", "simp_nation", "sip_tea", "sis", "sister_sage", "situation_ship", "situationship",
+  "six_seven", "six_seven_motion", "sizzurp", "skater_boy", "skater_girl", "skeet", "skibidi",
+  "skibidi_gyat", "skibidi_ohio", "skibidi_rizz", "skibidi_toilet", "skill_issue",
+  "skip_to_the_end", "skull", "skullpanda", "skye", "slap", "slaps", "slasher", "slay", "slayed",
+  "slaying", "sleep_on", "sleep_walking", "slime", "slim_sus", "slim_thicc", "slim_thick",
+  "slow_burn", "slow_mode", "smacks", "smh", "smiski", "smoke", "smoke_and_mirrors", "smol",
+  "smurf", "snack", "snatched", "sneks", "snipping", "snitched", "so", "so_fetch", "so_true",
+  "soap", "social_battery", "social_credit", "soda", "soft_boy", "soft_girl", "soft_launch",
+  "softlock", "solarpunk", "soldier_boy", "solo_leveling", "solulu", "somethings_cooking",
+  "sonny_angel", "soul_guitar", "soulmate", "sound", "sova", "soyjak", "spacecore",
+  "spaghetti_code", "sparks", "speak_on_it", "spear_of_longinus", "speedrun", "speedrunner",
+  "speedrunner_vs", "spider", "spider_verse", "spike", "spill_the_beans", "spill_the_tea",
+  "spin", "spinbot", "spinny_fish", "spirit", "spit_facts", "spit_on_that_thang", "sploot",
+  "spooky_season", "sport_mode", "spring", "behavior", "spray_and_pray", "spy_x_family", "squad_goals",
+  "sriracha", "stack_overflow", "stage", "stan", "stan_account", "stan_twitter", "stand_business",
+  "stand_proud", "standing_on_business", "stanley_cup", "star_boy", "star_girl", "starlight",
+  "stashing", "stay_mad", "stay_pressed", "stay_toxic", "stay_woke", "steampunk", "steeple",
+  "steve", "stink_eye", "stinker", "stoked", "stonks", "stop_the_cap", "stormfront", "strat",
+  "streak", "street_smarts", "stressing", "strider", "strike_a_pose", "stud", "styll",
+  "pewdiepie", "subtweet", "sudo", "sugar_coating", "sukuna", "sunlight", "superbowl",
+  "sus", "sussing", "sussy", "sussy_baka", "sweater_weather", "swerve", "swerved", "swiftie",
+  "swipe_life", "swole", "swoop", "synthwave", "syntax_error", "t_rex", "table_slap",
+  "taco_bell_bong", "tactics", "take_a_chill_pill", "take_a_seat", "take_notes", "take_the_l",
+  "take_the_w", "takis", "takis_fuego", "takjil", "tanghulu", "tanjiro", "tapioca", "tarik",
+  "taro", "tas", "taurus", "taylor_swift", "tbh", "tea", "technoblade", "tek_knight", "temp_v",
+  "tendies", "tenz", "that_girl", "that_guy", "thats_a_reach", "thats_cap", "thats_on_me",
+  "thats_on_period", "thats_wild", "the_boys", "the_math_aint_mathing", "the_plot_thickens",
+  "thicc", "thick_skin", "thirsty", "thorns", "thought_daughter", "thr", "throw_hands",
+  "throw_shade", "thug_shaker", "time_is_a_flat_circle", "titanic", "to_the_moon", "toe_beans",
+  "toh", "toilet_tower", "toji", "top_diff", "top_frag", "top_g", "top_tier",
+  "tor", "totem", "totes", "touch_grass", "tower_of_hell", "toxic_positivity", "trade_hangout",
+  "trad", "trad_wife", "traffic_light", "training_arc", "trans_icon", "translucent", "trap_phone",
+  "trash_panda", "trauma_dump", "trauma_dumping", "traumacore", "travis_kelce", "triple_kill",
+  "trolling", "truss", "trust_the_process", "tseries", "ttd", "tubbo", "tuco", "tuff",
+  "tungtungsahur", "turn_up", "tweakin", "twin", "twin_flame", "twizzy", "tycoon", "tyler_durden",
+  "uhh", "unalive", "unbothered", "unbreaking", "unc", "uncanny_valley", "uncle_prod",
+  "understood_the_assignment", "unit_zero_one", "unhinged", "unlock_potential", "unserious",
+  "upgrader", "upper_decky", "urban_legend", "usopp", "uwu", "uwu_girl", "v", "valkyrie",
+  "value", "vamp", "vandal", "vanilla", "vaporwave", "venom", "vented", "vibe", "vibe_check",
+  "vibe_killer", "vibing", "victim_blaming", "videogame", "villager", "villain_arc",
+  "villain_mode", "vintage", "viper", "virgo", "vitamin_d", "void", "void_cat", "vought", "vpn",
+  "vsco_girl", "vultures", "w", "w_bracket", "w_mans", "w_rizz", "wack", "wakeupf1lthy",
+  "wallflower", "wallhack", "wallstreetbets", "walter_white", "wano", "warden", "warm_take",
+  "wasted", "wasted_money", "watch_party", "we_are_so_back", "we_move", "webcore", "wednesday",
+  "weird_flex_but_ok", "weird_flex", "champp" "weirdchamp", "whale", "whip", "who_is_this_diva", "who_let_him_cook",
+  "let_him_cook_", "whole_meal", "wide_peppo", "wig", "wig_snatched", "wilbur", "wild", "wildin", "winning",
+  "winter_arc", "witchcore", "wither", "wkwk", "wocky_slush", "slay", "wojak", "wok", "woke", "woofer",
+  "world_record", "wsb", "wya", "wyd", "wylin", "xan", "xqc", "yaas", "yapper", "yapping",
+  "yare_yare", "ye", "yeet", "yeeted", "yeezy", "yig", "yoink", "yor_forger", "yoriichi", "yoru",
+  "you_ate", "you_good", "young_unc", "your_honor", "y2k", "za_warudo", "zaddy", "zang", "zaza",
+  "zenitsu", "zero_chill", "zimomo", "zombie", "zombiecore", "zombieing", "zoomies", "zoomer",
+  "zoomer_perm", "zoro", "bk_foot_lettuce", "number_15", "typeshit", "chronically_online", "ambatukam", 
+  "dreamybull", "vine_boom", "chocolate_chocolate", "ice_cream", "spawn_peek", "caught_in_4k", 
+  "rng", "rng_gods", "f2p", "brb", "feature", "balance", "meta", "wall_hop", "dance_clip", 
+  "checkpoint", "tapping", "innocent", "fang", "seer", "cursed_dual", "v4", "radiant", 
+  "trading_hall", "skeleton", "shrek", "morb", "deep", "a_train", "choccy_milk", "racoon", 
+  "good_boy", "git_push", "git_pull", "git_commit", "127_0_0_1", "404_not_found", "500_error", 
+  "turn_off", "friends_w_benefits", "fwb", "nsa", "define_relationship", "shower", 
+  "deodorant", "devilcore", "weirdcore"
 ];
 
-const BASE_BAD_WORDS = [
-  "2g1c", "2 girls 1 cup", "acrotomophilia", "alabama hot pocket", "alaskan pipeline", "anal", "anilingus", "anus", "apeshit", "arsehole", "ass", "asshole", "assmunch", "auto erotic", "autoerotic", "babeland", "baby batter", "baby juice", "ball gag", "ball gravy", "ball kicking", "ball licking", "ball sack", "ball sucking", "bangbros", "bareback", "barely legal", "barenaked", "bastard", "bastardo", "bastinado", "bbw", "bdsm", "beaner", "beaners", "beaver cleaver", "goon", "gooning", "gooners", "beaver lips", "bestiality", "big black", "big breasts", "big knockers", "big tits", "bimbos", "birdlock", "bitch", "bitches", "black cock", "blonde action", "breast", "breasts", "blonde on blonde action", "blowjob", "blow job", "blow your load", "blue waffle", "blumpkin", "bollocks", "bondage", "boner", "boob", "boobs", "booty call", "brown showers", "brunette action", "bukkake", "bulldyke", "bullet vibe", "bullshit", "bung hole", "bunghole", "busty", "butt", "buttcheeks", "butthole", "camel toe", "camgirl", "camslut", "camwhore", "carpet muncher", "carpetmuncher", "child predator", "chocolate rosebuds", "circlejerk", "cleveland steamer", "clit", "clitoris", "clover clamps", "clusterfuck", "cock", "cocks", "coprolagnia", "coprophilia", "cornhole", "coon", "coons", "crap", "crappy", "creampie", "cum", "cumming", "cunnilingus", "cunt", "darkie", "date rape", "daterape", "deep throat", "deepthroat", "dendrophilia", "dick", "dildo", "dingleberry", "dingleberries", "dirty pillows", "dirty sanchez", "doggie style", "doggiestyle", "doggy style", "doggystyle", "dog style", "dolcett", "domination", "dominatrix", "dommes", "donkey punch", "double dong", "double penetration", "dp action", "dry hump", "dvda", "eat my ass", "ecchi", "ejaculation", "erotic", "erotism", "escort", "eunuch", "faggot", "fecal", "felch", "fellatio", "feltch", "female squirting", "femdom", "figging", "fingerbang", "fingering", "fisting", "foot fetish", "footjob", "freaky", "frotting", "fuck", "fuck buttons", "fuckin", "fucking", "fucktards", "fudge packer", "fudgepacker", "futanari", "gang bang", "gay sex", "genitals", "giant cock", "girl on", "girl on top", "girls gone wild", "goatcx", "goatse", "god damn", "gokkun", "golden shower", "goodpoop", "goo girl", "goregasm", "grope", "group sex", "g-spot", "guro", "hand job", "handjob", "hard core", "hardcore", "hentai", "hoe", "homicide", "homixide", "homoerotic", "honkey", "hooker", "hot carl", "hot chick", "how to kill", "how to murder", "huge fat", "humping", "incest", "intercourse", "jack off", "jail bait", "jailbait", "jerk off", "jigaboo", "jiggaboo", "jiggerboo", "jizz", "juggs", "kike", "kinbaku", "kinkster", "kinky", "knobbing", "leather restraint", "leather straight jacket", "lemon party", "lolita", "lovemaking", "make me come", "male squirting", "masturbate", "menage a trois", "milf", "missionary position", "motherfucker", "mound of venus", "mr hands", "muff diver", "muffdiving", "nambla", "nawashi", "negro", "neonazi", "nigga", "nigger", "nig nog", "nimphomania", "nipple", "nipples", "nsfw images", "nude", "nudity", "nympho", "nymphomania", "octopussy", "omorashi", "one cup two girls", "one guy one jar", "orgasm", "orgy", "paedophile", "paki", "panties", "panty", "pedobear", "pedophile", "pegging", "penis", "phone sex", "piece of shit", "pissing", "piss pig", "pisspig", "playboy", "pleasure chest", "pole smoker", "ponyplay", "poof", "poon", "poontang", "punany", "poop chute", "poopchute", "pregnant", "porn", "porno", "pornography", "prince albert piercing", "pthc", "pubes", "pussy", "queaf", "queef", "quim", "raghead", "raging boner", "rape", "raping", "rapist", "rectum", "reverse cowgirl", "rimjob", "rimming", "rosy palm", "rosy palm and her 5 sisters", "rusty trombone", "sadism", "santorum", "scat", "schlong", "scissoring", "semen", "sex", "sexo", "sexy", "shaved beaver", "shaved pussy", "shemale", "shibari", "shiksas", "shit", "shitblimp", "shitty", "shota", "shrimping", "skeet", "slanteye", "slut", "s&m", "smut", "snatch", "snowballing", "sodomize", "sodomy", "spic", "splooge", "splooge moose", "spooge", "spread legs", "spunk", "strap on", "strapon", "strappado", "strip club", "style doggy", "suck", "sucks", "suicide girls", "sultry women", "swastika", "swinger", "tainted love", "taste my", "tea bagging", "threesome", "throating", "tied up", "tight white", "tit", "tits", "titties", "titty", "tongue in a", "topless", "tosser", "towelhead", "tranny", "tribadism", "tub girl", "tubgirl", "tushy", "twat", "twink", "twinkie", "two girls one cup", "undressing", "upskirt", "urethra play", "urophilia", "vagina", "venus mound", "vibrator", "violet wand", "vorarephilia", "voyeur", "vulva", "wank", "wetback", "wet dream", "white power", "wrapping men", "wrinkled starfish", "xx", "xxx", "yaoi", "yellow showers", "yiffy", "zoophilia", "arse", "ballsack", "balls", "biatch", "bloody", "bollock", "bollok", "bugger", "bum", "buttplug", "crap", "damn", "dyke", "fag", "feck", "fellate", "felching", "f u c k", "flange", "Goddamn", "God damn", "hell", "homo", "jerk", "knobend", "knob end", "labia", "lmao", "lmfao", "muff", "omg", "piss", "poop", "prick", "pube", "queer", "scrotum", "s hit", "sh1t", "smegma", "turd", "whore", "4r5e", "50 yard cunt punt", "5h1t", "5hit", "a_s_s", "a2m", "a$$", "a55", "a$$hole", "a55hole", "adult", "aeolus", "ahole", "amateur", "anal impaler", "anal leakage", "analprobe", "ar5e", "areola", "areole", "arian", "arrse", "aryan", "ass fuck", "ass hole", "ass-fucker", "assbang", "assbanged", "assbangs", "asses", "assfuck", "assfucker", "assfukka", "assh0le", "asshat", "assho1e", "assholes", "assmaster", "assmucus", "asswhole", "asswipe", "asswipes", "azazel", "azz", "b!tch", "b00bs", "b17ch", "b1tch", "babe", "babes", "ballbag", "bang", "bang (one's) box", "banger", "barf", "bastards", "bawdy", "beardedclam", "beastial", "beastiality", "beatch", "beater", "beaver", "beef curtain", "beer", "beeyotch", "bellend", "beotch", "bestial", "bi+ch", "bigtits", "bimbo", "bitch tit", "bitched", "bitcher", "bitchers", "bitchin", "bitching", "bitchy", "blow", "blow me", "blow mud", "blowjobs", "blue waffle", "blumpkin", "bod", "bodily", "boink", "boiolas", "bone", "boned", "boners", "bong", "boobies", "booby", "booger", "bookie", "booobs", "boooobs", "booooobs", "booooooobs", "bootee", "bootie", "booty", "booze", "boozer", "boozy", "bosom", "bosomy", "bowel", "bowels", "bra", "brassiere", "breast", "breasts", "buceta", "bull shit", "bullshits", "bullshitted", "bullturds", "bung", "bunny fucker", "bust a load", "butt fuck", "butt fuck", "buttfuck", "buttfucker", "buttmuch", "c-0-c-k", "c-o-c-k", "c-u-n-t", "c.0.c.k", "c.o.c.k.", "c.u.n.t", "c0ck", "c0cksucker", "caca", "cahone", "cameltoe", "cawk", "cervix", "chinc", "chincs", "chink", "choade", "chode", "chodes", "chota bags", "cipa", "cl1t", "climax", "clit licker", "clitorus", "clits", "clitty", "clitty litter", "cnut", "cocain", "cocaine", "cock pocket", "cock snot", "cock sucker", "cock-sucker", "cockblock", "cockface", "cockhead", "cockholster", "cockknocker", "cockmunch", "cockmuncher", "cocksmoker", "cocksuck", "cocksucked", "cocksucker", "cocksucking", "cocksucks", "cocksuka", "cocksukka", "coital", "cok", "cokmuncher", "coksucka", "commie", "condom", "cop some wood", "corksucker", "cornhole", "corp whore", "cox", "crabs", "crack", "cracker", "crackwhore", "crappy", "cum chugger", "cum dumpster", "cum freak", "cum guzzler", "cumdump", "cummer", "cummin", "cums", "cumshot", "cumshots", "cumslut", "cumstain", "cunilingus", "cunillingus", "cunny", "cunt hair", "cunt-struck", "cuntbag", "cuntface", "cunthunter", "cuntlick", "cuntlick", "cuntlicker", "cuntlicker", "cuntlicking", "cunts", "cuntsicle", "cut rope", "cyalis", "cyberfuc", "cyberfuck", "cyberfucked", "cyberfucker", "cyberfuckers", "cyberfucking", "d0ng", "d0uch3", "d0uche", "d1ck", "d1ld0", "d1ldo", "dago", "dagos", "dammit", "damned", "damnit", "dawgie-style", "dick hole", "dick shy", "dick-ish", "dickbag", "dickdipper", "dickface", "dickflipper", "dickhead", "dickheads", "dickish", "dickripper", "dicksipper", "dickweed", "dickwhipper", "dickzipper", "diddle", "dike", "dildos", "diligaf", "dillweed", "dimwit", "dingle", "dink", "dinks", "dipship", "dirsa", "dirty Sanchez", "dlck", "dog-fucker", "doggie-style", "doggin", "dogging", "doggy-style", "dong", "donkeyribber", "doofus", "doosh", "dopey", "douch3", "douche", "douchebag", "douchebags", "douchey", "drunk", "duche", "dumass", "dumbass", "dumbasses", "dummy", "dykes", "eat a dick", "eat hair pie", "ejaculate", "ejaculated", "ejaculates", "ejaculating", "ejaculatings", "ejakulate", "enlargement", "erect", "erection", "essohbee", "extacy", "extasy", "f u c k e r", "f_u_c_k", "f-u-c-k", "f.u.c.k", "f4nny", "facial", "fack", "fagg", "fagged", "fagging", "faggit", "faggitt", "faggs", "fagot", "fagots", "fags", "faig", "faigt", "fanny", "fannybandit", "fannyflaps", "fannyfucker", "fanyy", "fart", "fartknocker", "fat", "fatass", "fcuk", "fcuker", "fcuking", "fecker", "felcher", "feltcher", "fingerfuck", "fingerfucked", "fingerfucker", "fingerfuckers", "fingerfucking", "fingerfucks", "fist fuck", "fisted", "fistfuck", "fistfucked", "fistfucker", "fistfuckers", "fistfucking", "fistfuckings", "fistfucks", "fisty", "flog the log", "floozy", "foad", "fondle", "foobar", "fook", "fooker", "foreskin", "freex", "frigg", "frigga", "fubar", "fuck", "fuck hole", "fuck puppet", "fuck trophy", "fuck yo mama", "fuck-ass", "fuck-bitch", "fuck-tard", "fucka", "fuckass", "fucked", "fucker", "fuckers", "fuckface", "fuckhead", "fuckheads", "fuckings", "fuckingshitmotherfucker", "fuckme", "fuckmeat", "fucknugget", "fucknut", "fuckoff", "fucks", "fucktard", "fucktoy", "fuckup", "fuckwad", "fuckwhit", "fuckwit", "fuk", "fuker", "fukker", "fukkin", "fuks", "fukwhit", "fukwit", "fux", "fux0r", "fvck", "fxck", "gae", "gai", "gang-bang", "gangbang", "gangbang", "gangbanged", "gangbangs", "ganja", "gassy ass", "gay", "gaylord", "gays", "gaysex", "gey", "gfy", "ghay", "ghey", "gigolo", "glans", "god-dam", "god-damned", "godamn", "godamnit", "goddam", "goddammit", "goddamn", "goddamned", "goldenshower", "gonad", "gonads", "gook", "gooks", "gringo", "gspot", "gtfo", "guido", "h0m0", "h0mo", "ham flap", "hard on", "hardcoresex", "he11", "hebe", "heeb", "hemp", "heroin", "herp", "herpes", "herpy", "heshe", "hitler", "hiv", "hoar", "hoare", "hobag", "hoer", "hom0", "homey", "homoey", "honky", "hooch", "hookah", "hoor", "hootch", "hooter", "hooters", "hore", "horniest", "horny", "hotsex", "how to murdep", "hump", "humped", "hussy", "hymen", "inbred", "injun", "j3rk0ff", "jack-off", "jackass", "jackhole", "jackoff", "jap", "japs", "jerk-off", "jerk0ff", "jerked", "jerkoff", "jism", "jiz", "jizm", "jizzed", "junkie", "junky", "kawk", "kikes", "kill", "kinky Jesus", "kkk", "klan", "knob", "knobead", "knobed", "knobhead", "knobjocky", "knobjokey", "kock", "kondum", "kondums", "kooch", "kooches", "kootch", "kraut", "kum", "kummer", "kumming", "kums", "kunilingus", "kwif", "kys", "kyke", "l3i+ch", "l3itch", "lech", "LEN", "leper", "lesbians", "lesbo", "lesbos", "lez", "lezbian", "lezbians", "lezbo", "lezbos", "lezzie", "lezzies", "lezzy", "loin", "loins", "lube", "lust", "lusting", "lusty", "m-fucking", "m0f0", "m0fo", "m45terbate", "ma5terb8", "ma5terbate", "mafugly", "mams", "masochist", "massa", "master-bate", "masterb8", "masterbat*", "masterbat3", "masterbate", "masterbating", "masterbation", "masterbations", "masturbating", "masturbation", "maxi", "menses", "menstruate", "menstruation", "meth", "mo-fo", "mof0", "mofo", "molest", "moolie", "moron", "mothafuck", "mothafucka", "mothafuckas", "mothafuckaz", "mothafucked", "mothafucker", "mothafuckers", "mothafuckin", "mothafucking", "mothafuckings", "mothafucks", "mother fucker", "mother fucker", "motherfuck", "motherfucka", "motherfucked", "motherfuckers", "motherfuckin", "motherfucking", "motherfuckings", "motherfuckka", "motherfucks", "mtherfucker", "mthrfucker", "mthrfucking", "muff puff", "muffdiver", "murder", "mutha", "muthafecker", "muthafuckaz", "muthafucker", "muthafuckker", "muther", "mutherfucker", "mutherfucking", "muthrfucking", "n1gga", "n1gger", "nad", "nads", "naked", "napalm", "nappy", "nazi", "nazism", "need the dick", "nigg3r", "nigrifies", "nigri", "nigg4h", "niggah", "niggas", "niggaz", "niggers", "niggle", "niglet", "nimrod", "ninny", "nob", "nob jokey", "nobhead", "nobjocky", "nobjokey", "nooky", "numbnuts", "nut butter", "nutsack", "opiate", "opium", "oral", "orally", "organ", "orgasim", "orgasims", "orgasmic", "orgasms", "orgies", "ovary", "ovum", "ovums", "p.u.s.s.y.", "p0rn", "paddy", "pantie", "pastie", "pasty", "pawn", "pcp", "pecker", "pedo", "pedophilia", "pedophiliac", "pee", "peepee", "penetrate", "penetration", "penial", "penile", "penisfucker", "perversion", "peyote", "phalli", "phallic", "phonesex", "phuck", "phuk", "phuked", "phuking", "phukked", "phukking", "phuks", "phuq", "pigfucker", "pillowbiter", "pimp", "pimpis", "pinko", "piss-off", "pissed", "pisser", "pissers", "pisses", "pissflaps", "pissin", "pissoff", "pissoff", "pms", "polack", "pollock", "pornos", "pot", "potty", "pricks", "prig", "pron", "prostitute", "prude", "pubic", "pubis", "punkass", "punky", "puss", "pusse", "pussi", "pussies", "pussy fart", "pussy palace", "pussypounder", "pussys", "puto", "queaf", "queero", "queers", "quicky", "r-tard", "racy", "raped", "raper", "raunch", "rectal", "rectus", "reefer", "reetard", "reich", "retard", "retarded", "revue", "rimjaw", "ritard", "rtard", "rum", "rump", "rumprammer", "ruski", "s_h_i_t", "s-h-1-t", "s-h-i-t", "s-o-b", "s.h.i.t.", "s.o.b.", "s0b", "sadist", "sandbar", "sausage queen", "scag", "scantily", "schizo", "screw", "screwed", "screwing", "scroat", "scrog", "scrot", "scrote", "scrud", "scum", "seaman", "seamen", "seduce", "sexual", "sh!+", "sh!t", "shag", "shagger", "shaggin", "shagging", "shamedame", "shi+", "shit fucker", "shitdick", "shite", "shiteater", "shited", "shitey", "shitface", "shitfuck", "shitfull", "shithead", "shithole", "shithouse", "shiting", "shitings", "shits", "shitt", "shitted", "shitter", "shitters", "shitting", "shittings", "shiz", "sissy", "skag", "skank", "slave", "sleaze", "sleazy", "slope", "slut bucket", "slutdumper", "slutkiss", "sluts", "smutty", "sniper", "snuff", "sodom", "son-of-a-bitch", "souse", "soused", "spac", "sperm", "spick", "spik", "spiks", "steamy", "stfu", "stiffy", "stoned", "strip", "stroke", "stupid", "sucked", "sucking", "sumofabiatch", "t1t", "t1tt1e5", "t1tties", "tampon", "tard", "tawdry", "teabagging", "teat", "teets", "teez", "terd", "teste", "testee", "testes", "testical", "testicle", "testis", "thrust", "thug", "tinkle", "tit wank", "titfuck", "titi", "titt", "tittie5", "tittiefucker", "tittyfuck", "tittyfucker", "tittywank", "titwank", "toke", "toots", "tramp", "transsexual", "trashy", "tush", "tw4t", "twathead", "twats", "twatty", "twunt", "twunter", "ugly", "undies", "unwed", "urinal", "urine", "uterus", "uzi", "v14gra", "v1gra", "vag", "valium", "viagra", "virgin", "vixen", "vodka", "vomit", "vulgar", "w00se", "wad", "wang", "wanker", "wanky", "wazoo", "wedgie", "weed", "weenie", "weewee", "weiner", "weirdo", "wench", "wh0re", "wh0reface", "whitey", "whiz", "whoar", "whoralicious", "whorealicious", "whored", "whoreface", "whorehopper", "whorehouse", "whores", "whoring", "wigger", "willies", "willy", "womb", "woody", "wop", "x-rated", "xrated", "yeasty", "yobbo", "zoophile", "asshole*", "beastial*", "bestial*", "bitch*", "buttmunch", "cockmunch*", "cocksuck*", "cuntlick*", "donkeypunch*", "ejaculat*", "felch*", "fleshflute", "*fuck*", "gangbang*", "hardcoresex", "jack-off", "jerk-off", "niggers", "pricks", "pussys", "shitter*", "shitting*", "skank*", "twunt*", "wank*", "*whore*", "cocksuck", "cocksucked", "cocksucks", "cyberfucked", "cyberfucking", "ejaculates", "ejaculating", "fingerfuck", "fingerfucked", "fingerfucking", "fingerfucks", "fistfucked", "fistfuckers", "fistfucking", "fistfuckings", "fistfucks", "fuckme", "gangbanged", "gangbangs", "jiz", "jizm", "mothafucked", "mothafucking", "pissin", "shitters", "shitty"
+// ============================================================================
+// EFFICIENT BAD WORDS LIST
+// ============================================================================
+
+const SUBSTRING_BAD_WORDS = [
+  "2 girls 1 cup", "2g1c", "4r5e", "50 yard cunt punt", "5h1t", "5hit", "a2m", "acrotomophilia", 
+  "alabama hot pocket", "alaskan pipeline", "anilingus", "apeshit", "arsehole", "assbang", "assfuck", 
+  "asshat", "asshole", "assmaster", "assmucus", "assmunch", "asswipe", "auto erotic", "autoerotic", 
+  "azazel", "babeland", "baby batter", "baby juice", "ball gag", "ball gravy", "ball kicking", 
+  "ball licking", "ball sack", "ball sucking", "ballbag", "bangbros", "bareback", "barely legal", 
+  "barenaked", "bastard", "bastardo", "bastinado", "bbw", "bdsm", "beaner", "beardedclam", "beastial", 
+  "beastiality", "beaver cleaver", "beaver lips", "bellend", "bestiality", "big black", "big breasts", 
+  "big knockers", "big tits", "bimbos", "birdlock", "bitch", "blow me", "blow mud", "blowjob", 
+  "blow your load", "blue waffle", "blumpkin", "bodily", "boiolas", "bollocks", "bondage", "boobies", 
+  "bootie", "booty call", "brown showers", "brunette action", "buceta", "bukkake", "bulldyke", 
+  "bullet vibe", "bullshit", "bung hole", "bunghole", "bunny fucker", "bust a load", "busty", 
+  "butt fuck", "buttcheeks", "butthole", "buttmuch", "caca", "cahone", "camel toe", "cameltoe", 
+  "camgirl", "camslut", "camwhore", "carpet muncher", "carpetmuncher", "cawk", "cervix", "chinc", 
+  "chink", "chocolate rosebuds", "circlejerk", "cleveland steamer", "clit", "clitoris", "clover clamps", 
+  "clusterfuck", "cnut", "cocain", "cocaine", "cock", "coital", "cokmuncher", "commie", "condom", 
+  "coon", "cop some wood", "coprolagnia", "coprophilia", "cornhole", "corp whore", "crackwhore", 
+  "creampie", "cum chugger", "cum dumpster", "cum freak", "cum guzzler", "cumdump", "cummer", 
+  "cumming", "cumshot", "cumslut", "cumstain", "cunilingus", "cunnilingus", "cunny", "cunt", 
+  "cyalis", "cyberfuc", "darkie", "date rape", "daterape", "dawgie-style", "deep throat", "deepthroat", 
+  "dendrophilia", "dick", "dildo", "diligaf", "dillweed", "dingleberry", "dipship", "dirsa", 
+  "dirty pillows", "dirty sanchez", "dlck", "dog-fucker", "doggie style", "doggiestyle", "doggin", 
+  "doggy style", "doggystyle", "dolcett", "domination", "dominatrix", "dommes", "dong", "donkey punch", 
+  "donkeyribber", "doosh", "double dong", "double penetration", "douche", "dp action", "dry hump", 
+  "duche", "dumass", "dumbass", "dvda", "dyke", "eat a dick", "eat hair pie", "eat my ass", "ecchi", 
+  "ejaculate", "ejaculation", "ejakulate", "enlargement", "erection", "erotic", "erotism", "escort", 
+  "essohbee", "eunuch", "extacy", "extasy", "faggot", "fannybandit", "fannyflaps", "fartknocker", 
+  "fcuk", "fecal", "fecker", "felch", "fellatio", "feltch", "female squirting", "femdom", "figging", 
+  "fingerbang", "fingering", "fisting", "fisty", "flog the log", "floozy", "foad", "fondle", 
+  "foot fetish", "footjob", "foreskin", "freaky", "freex", "frigg", "frotting", "fubar", "fuck", 
+  "fudge packer", "fudgepacker", "futanari", "fux0r", "gang bang", "gangbang", "ganja", "gassy ass", 
+  "gay sex", "gaylord", "genitals", "genital", "giant cock", "gigolo", "girl on top", "girls gone wild", "glans", 
+  "goatcx", "goatse", "god damn", "gokkun", "golden shower", "gonad", "goodpoop", "goo girl", 
+  "gook", "goregasm", "gringo", "grope", "group sex", "g-spot", "gtfo", "guido", "guro", "ham flap", 
+  "hand job", "handjob", "hard core", "hard on", "hardcore", "hebe", "heeb", "hentai", "heroin", 
+  "herpes", "heshe", "hitler", "hoar", "hobag", "homoerotic", "honkey", "hooch", "hookah", "hooker", 
+  "hootch", "hooter", "hore", "horniest", "hot carl", "hot chick", "how to kill", "how to murder", 
+  "huge fat", "humping", "hussy", "hymen", "inbred", "incest", "injun", "intercourse", "jack off", 
+  "jackass", "jackhole", "jackoff", "jail bait", "jailbait", "jap", "jelly donut", "jerk off", 
+  "jerk0ff", "jerkoff", "jigaboo", "jiggaboo", "jiggerboo", "jism", "jiz", "jizz", "juggs", "junkie", 
+  "kike", "kinbaku", "kinkster", "kinky", "kkk", "klan", "knobbing", "kondum", "kooch", "kootch", 
+  "kraut", "kum", "kunilingus", "kwif", "kyke", "labia", "leather restraint", "lech", "lemon party", 
+  "leper", "lesbian", "lesbo", "lez", "lmfao", "loin", "lolita", "lovemaking", "mafugly", 
+  "make me come", "male squirting", "masochist", "massa", "masturbate", "masturbation", "maxi", 
+  "menage a trois", "menses", "menstruate", "meth", "milf", "missionary position", "mofo", "molest", 
+  "moolie", "moron", "motherfucker", "mound of venus", "mr hands", "muff diver", "muff puff", 
+  "muffdiver", "muffdiving", "murder", "mutha", "nambla", "napalm", "nappy", "nawashi", "nazi", 
+  "need the dick", "negro", "neonazi", "nigga", "nigger", "niggle", "niglet", "nig nog", "nimphomania", 
+  "nimrod", "ninny", "nipple", "nob jokey", "nobhead", "nobjocky", "nooky", "nsfw", "nude", "nudity", 
+  "numbnuts", "nut butter", "nutsack", "nympho", "nymphomania", "octopussy", "omorashi", "one cup two girls", 
+  "one guy one jar", "opiate", "opium", "orgasim", "orgasm", "orgy", "ovary", "ovum", "paedophile", 
+  "paki", "panties", "panty", "pastie", "pasty", "pcp", "pecker", "pedobear", "pedophile", "pedophilia", 
+  "pegging", "penial", "penile", "penis", "perversion", "peyote", "phalli", "phallic", "phone sex", 
+  "phonesex", "phuck", "phuk", "phuq", "piece of shit", "pigfucker", "pillowbiter", "pimpis", "pinko", 
+  "piss pig", "pissflaps", "pissing", "pisspig", "playboy", "pleasure chest", "polack", "pole smoker", 
+  "pollock", "ponyplay", "poof", "poon", "poontang", "poop chute", "poopchute", "porn", "porno", 
+  "prig", "prince albert piercing", "prostitute", "prude", "pthc", "pubes", "pubic", "pubis", "punkass", 
+  "punky", "punany", "pussy", "puto", "queaf", "queef", "quicky", "quim", "racy", "raghead", 
+  "raging boner", "rectal", "rectum", "rectus", "reefer", "reetard", "reich", "retard", "reverse cowgirl", 
+  "revue", "rimjaw", "rimjob", "rimming", "ritard", "rosy palm", "rtard", "rumprammer", "ruski", 
+  "rusty trombone", "sadism", "sadist", "sandbar", "santorum", "sausage queen", "scag", "scantily", 
+  "schizo", "schlong", "scissoring", "scroat", "scrog", "scrotum", "scrud", "seaman", "semen", 
+  "seks", "segs", "sexual", "shag", "shamedame", "shaved beaver", "shemale", "shibari", "shit", 
+  "shiz", "shota", "shrimping", "sissy", "skag", "skeet", "slanteye", "slave", "sleaze", "slope", 
+  "slut", "smegma", "smut", "snuff", "snowballing", "sodom", "sodomize", "sodomy", "son-of-a-bitch", 
+  "souse", "spac", "sperm", "spic", "spik", "splooge", "spooge", "spread legs", "spunk", "steamy", 
+  "stfu", "stiffy", "stoned", "strap on", "strapon", "strappado", "strip club", "style doggy", 
+  "suck", "suicide girls", "sultry women", "sumofabiatch", "swastika", "swinger", "tainted love", 
+  "tampon", "tawdry", "tea bagging", "teabagging", "teat", "teets", "teez", "terd", "teste", 
+  "testical", "testicle", "testis", "threesome", "throating", "thrust", "thug", "tied up", "tight white", 
+  "tinkle", "titfuck", "titties", "titty", "toke", "tongue in a", "toots", "topless", "tosser", 
+  "towelhead", "tranny", "transsexual", "trashy", "tribadism", "tub girl", "tubgirl", "tushy", 
+  "twat", "twink", "twunt", "ugly", "undies", "undressing", "unwed", "upskirt", "urethra", "urinal", 
+  "urine", "urophilia", "uterus", "uzi", "vagina", "valium", "venus mound", "viagra", "vibrator", 
+  "violet wand", "virgin", "vixen", "vodka", "vomit", "vorarephilia", "voyeur", "vulgar", "vulva", 
+  "wad", "wang", "wank", "wazoo", "wedgie", "weewee", "weiner", "weirdo", "wench", "wet dream", 
+  "wetback", "white power", "whitey", "whiz", "whore", "wigger", "willies", "willy", "womb", "woody", 
+  "wop", "wrapping men", "wrinkled starfish", "x-rated", "xxx", "yaoi", "yeasty", "yellow showers", 
+  "yiffy", "yobbo", "zoophile", "zoophilia", "giving head", "givinghead", "getting head", "give head", 
+  "suck head", "suck dick", "suck my", "eat my", "eat out", "swallow cum", "swallow load", 
+  "goon", "gooning", "gooners", "child predator", "biatch", "buttplug", "fellate", "felching", 
+  "knobend", "arrse", "beeyotch", "boink", "bosom", "choade", "climax", 
+  "diddle", "dimwit", "doofus", "dopey", "douche", "fack", "fcuk", "felcher", "frigga", 
+  "fvck", "fxck", "godamn", "herp", "hiv", "hoare", "kawk", "kwif", "lezbian", "lezbo", 
+  "lezzie", "lezzy", "mams", "muther", "nazism", "nigri", "nigrifies", "orgasims", 
+  "orgasmic", "orgies", "pedo", "pedophiliac", "pisser", "pusse", "pussi", 
+  "queero", "rtard", "raper", "raunch", "retarded", "scrot", "scrote", "shagger", "shite", 
+  "shited", "shitey", "shitt", "smutty", "soused", "spick", "spiks", "tittie", 
+  "twats", "twatty", "twunter", "wanker", "wanky", "weenie", "whoar"
 ];
 
-const dictCache = new Map();
+const BOUNDARY_BAD_WORDS = [
+  "ass", "anal", "rape", "cum", "weed", "pot", "kys", "stroke", "snatch", "knob", "muff", "tit", "tits", 
+  "chode", "dong", "hump", "lube", "pimp", "scat", "shaft", "shag", "skank", "strip", "tart", 
+  "tramp", "sex", "boner", "perv", "fag", "fk", "fuk", "bum", "crap", "damn", "hell", "homo", 
+  "jerk", "lmao", "omg", "piss", "poop", "prick", "pube", "queer", "turd", "oral", "head",
 
-async function checkIsProfane(text) {
-  try {
-    const encodedText = encodeURIComponent(text);
-    const url = `https://www.purgomalum.com/service/json?text=${encodedText}`;
-    const response = await axios.get(url);
-    if (response.data.result && response.data.result.indexOf("*") !== -1) return true;
-    return false;
-  } catch (e) {
+  // --- Relocated potential false-positive roots & generic terms ---
+  "gai", "gae", "pron", "cipa", "dago", "titi", "pms", "bra", "crack", "fat", "lust", "pee", "rum", 
+  "screw", "scum", "vag", "puss", "titt", "babe", "drunk", "dummy", "kill", "naked", "organ", "pawn", "potty", "stupid"
+];
+
+// Exceptions that are clean despite matching boundary rules
+const EXCEPTIONS = ["pen is", "penis mightier"];
+
+// Recognized affixes that keep bad boundary words flagged (e.g. dumbass, asses)
+const ALLOWED_SUFFIXES = [
+  "s", "es", "z", "ez", "ed", "d", "ing", "in", "er", "ers", "a", "ah", "r", "y", "ie", "ee", "ly", 
+  "bag", "head", "hole", "tard", "wad", "wit", "face", "shit", "fuck", "cock", "muncher", 
+  "sucker", "licker", "fucker", "boy", "girl", "hat", "wipe", "plug", "munch", "juice"
+];
+
+const ALLOWED_PREFIXES = [
+  "dumb", "jack", "fat", "smart", "lazy", "ugly", "shit", "fuck", "bitch", "cum", "cock", "ass", 
+  "mother", "motha", "bull", "horse", "dog", "cat", "pig", "cow", "rat", "pieceof"
+];
+
+// ============================================================================
+// OBSCENITY ENGINE
+// ============================================================================
+
+const ObscenityEngine = (function () {
+
+  // Dynamic Sus Adjectives Combiner
+  const SUS_MODIFIERS = ["wet", "hard", "juicy", "throbbing", "stiff", "sweaty", "sticky", "horny", "massive"];
+  const SUS_TARGETS = ["eggplant", "peach", "sausage", "weiner", "hotdog", "cucumber", "banana", "melon", "meat", "stick", "wood", "kitty", "cat"];
+  
+  for (let m = 0; m < SUS_MODIFIERS.length; m++) {
+    for (let t = 0; t < SUS_TARGETS.length; t++) {
+      SUBSTRING_BAD_WORDS.push(SUS_MODIFIERS[m] + " " + SUS_TARGETS[t]);
+    }
+  }
+
+  const escapeRegExp = function(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
+
+  const buildRegex = function(word) {
+    let cleanWord = word.toLowerCase().replace(/[\s_\-\.\*]/g, "");
+    if (cleanWord.length === 0) return null;
+    
+    // Deduplicate to allow regex + rule to function effectively
+    cleanWord = cleanWord.replace(/(.)\1+/g, '$1');
+
+    let patternStr = "";
+    for(let k=0; k<cleanWord.length; k++) {
+       let c = cleanWord[k];
+       let nextC = cleanWord[k+1];
+       let isLast = (k === cleanWord.length - 1);
+       let isSecondToLast = (k === cleanWord.length - 2);
+       
+       if (c === 'c' && nextC === 'k') {
+          patternStr += '(?:c+k+|k+|x+|q+)';
+          k++; 
+       }
+       else if (c === 'i' && nextC === 'e' && isSecondToLast) {
+          patternStr += '(?:i+e+|y+|e+e+|e+y+|i+i+)';
+          k++;
+       }
+       else if (c === 'e' && nextC === 'r' && isSecondToLast) {
+          patternStr += '(?:e+r+|a+|r+|a+h+)';
+          k++;
+       }
+       else if (c === 'y' && isLast) {
+          patternStr += '(?:y+|i+e+|e+e+|e+y+|i+i+)';
+       }
+       else if (c === 's' && isLast) {
+          patternStr += '(?:s+|z+)';
+       }
+       else if (c === 'z' && isLast) {
+          patternStr += '(?:z+|s+)';
+       }
+       else if (c === 'o' && isLast) {
+          patternStr += '(?:o+|o+e+)';
+       }
+       else {
+          patternStr += escapeRegExp(c) + '+';
+       }
+    }
+    return new RegExp(patternStr, 'g');
+  };
+
+  const REGEX_SUBSTRING = [];
+  const REGEX_BOUNDARY = [];
+
+  for (let i = 0; i < SUBSTRING_BAD_WORDS.length; i++) {
+    const r = buildRegex(SUBSTRING_BAD_WORDS[i]);
+    if (r) REGEX_SUBSTRING.push({ word: SUBSTRING_BAD_WORDS[i], regex: r });
+  }
+
+  for (let j = 0; j < BOUNDARY_BAD_WORDS.length; j++) {
+    const r = buildRegex(BOUNDARY_BAD_WORDS[j]);
+    if (r) REGEX_BOUNDARY.push({ word: BOUNDARY_BAD_WORDS[j], regex: r });
+  }
+
+  function normalizeWithMap(input) {
+    let normalized = "";
+    let i = 0;
+    const lowerInput = input.toLowerCase();
+
+    while (i < lowerInput.length) {
+      const char = lowerInput[i];
+
+      if (char === '_' || char === ' ' || char === '-') {
+        i++;
+        continue;
+      }
+
+      let multiMatched = false;
+      for (let m = 0; m < MULTI_DELEET.length; m++) {
+        const pat = MULTI_DELEET[m].pattern;
+        if (lowerInput.substring(i, i + pat.length) === pat) {
+          normalized += MULTI_DELEET[m].rep;
+          i += pat.length;
+          multiMatched = true;
+          break;
+        }
+      }
+      if (multiMatched) continue;
+
+      // Map numbers/symbols to letters, keep regular letters completely intact
+      const resolved = DELEET_MAP[char] || char;
+      normalized += resolved;
+      i++;
+    }
+
+    return { normalized: normalized, original: lowerInput };
+  }
+
+  function getWordCharsPrefix(str, index) {
+    let prefix = "";
+    for (let i = index - 1; i >= 0; i--) {
+      if (/[a-z0-9]/i.test(str[i])) {
+        prefix = str[i] + prefix;
+      } else {
+        break;
+      }
+    }
+    return prefix;
+  }
+
+  function getWordCharsSuffix(str, index) {
+    let suffix = "";
+    for (let i = index; i < str.length; i++) {
+      if (/[a-z0-9]/i.test(str[i])) {
+        suffix += str[i];
+      } else {
+        break;
+      }
+    }
+    return suffix;
+  }
+
+  function checkExceptions(origStr) {
+    const cleanOrig = origStr.replace(/[_]/g, ' ').replace(/\s+/g, ' ').trim();
+    for (let e = 0; e < EXCEPTIONS.length; e++) {
+      if (cleanOrig.indexOf(EXCEPTIONS[e]) !== -1) return true;
+    }
     return false;
   }
+
+  function scan(input) {
+    if (!input) return false;
+    
+    const data = normalizeWithMap(input);
+    const norm = data.normalized;
+    const orig = data.original;
+
+    if (checkExceptions(orig)) return false;
+
+    // 1. Check Substring Words
+    for (let s = 0; s < REGEX_SUBSTRING.length; s++) {
+      const entry = REGEX_SUBSTRING[s];
+      entry.regex.lastIndex = 0; 
+      const found = entry.regex.test(norm);
+      entry.regex.lastIndex = 0; 
+      if (found) {
+        return true;
+      }
+    }
+
+    // 2. Check Boundary Words with Affixes
+    for (let r = 0; r < REGEX_BOUNDARY.length; r++) {
+      const bEntry = REGEX_BOUNDARY[r];
+      bEntry.regex.lastIndex = 0; 
+      let match;
+
+      while ((match = bEntry.regex.exec(norm)) !== null) {
+        const prefix = getWordCharsPrefix(norm, match.index);
+        const suffix = getWordCharsSuffix(norm, match.index + match[0].length);
+        
+        const prefixValid = (prefix === "" || ALLOWED_PREFIXES.indexOf(prefix) !== -1);
+        const suffixValid = (suffix === "" || ALLOWED_SUFFIXES.indexOf(suffix) !== -1);
+
+        if (prefixValid && suffixValid) {
+          bEntry.regex.lastIndex = 0; 
+          return true; 
+        }
+      }
+      bEntry.regex.lastIndex = 0; 
+    }
+    
+    return false;
+  }
+
+  return { hasMatch: scan };
+})();
+
+// ============================================================================
+// SMART PHONETIC & SUBTLE REDUCTION LOGIC
+// ============================================================================
+
+function applySmartSubtleReduction(word) {
+  if (!word || word.length < 3) return null;
+  const str = word.toLowerCase();
+
+  const candidates = [];
+
+  // --- Phonetics/Endings ---
+  const matchY = str.match(/([^aeiou])(ie|y|ee)$/);
+  if (matchY) {
+    const base = str.substring(0, matchY.index + 1);
+    const currentEnding = matchY[2];
+    const endings = ["y", "ie", "ee", "ii", "ey"].filter(e => e !== currentEnding);
+    candidates.push(base + endings[Math.floor(Math.random() * endings.length)]);
+  }
+
+  if (/er$/.test(str)) {
+    const opts = ["a", "r", "ah"];
+    candidates.push(str.replace(/er$/, opts[Math.floor(Math.random() * opts.length)]));
+  }
+
+  if (/ck$/.test(str)) {
+    const opts = ["k", "x", "q"];
+    candidates.push(str.replace(/ck$/, opts[Math.floor(Math.random() * opts.length)]));
+  }
+
+  if (/s$/.test(str)) candidates.push(str.replace(/s$/, "z"));
+  if (/z$/.test(str)) candidates.push(str.replace(/z$/, "s"));
+  if (/o$/.test(str)) candidates.push(str.replace(/o$/, "oe"));
+
+  const reduced = str.charAt(0) + str.slice(1).replace(/[aeiou]/g, "");
+  if (reduced.length >= 3 && reduced.length !== str.length) {
+    candidates.push(reduced);
+  }
+
+  // --- Structural Reductions ---
+  const doubleLetterPattern = /(.)\1+/g;
+  const reducedDouble = str.replace(doubleLetterPattern, '$1');
+  if (reducedDouble !== str && reducedDouble.length >= 3) {
+    candidates.push(reducedDouble);
+  }
+
+  const vowels = ['a', 'e', 'i', 'o', 'u'];
+  for (let i = 1; i < str.length - 1; i++) {
+    if (vowels.indexOf(str[i]) !== -1) {
+      const reducedVowel = str.slice(0, i) + str.slice(i + 1);
+      if (reducedVowel.length >= 3 && reducedVowel.length <= 20) {
+        candidates.push(reducedVowel);
+      }
+    }
+  }
+
+  if (str.length > 6) {
+    const truncated = str.substring(0, Math.max(4, Math.floor(str.length * 0.7)));
+    if (truncated.length >= 3) {
+      candidates.push(truncated);
+    }
+  }
+
+  const suffixes = ['er', 'ly', 'ing', 'ed', 'ness', 'tion', 'sion', 'ment', 'able', 'ible'];
+  for (let s = 0; s < suffixes.length; s++) {
+    const suffix = suffixes[s];
+    if (str.endsWith(suffix) && str.length > suffix.length + 2) {
+      const stemmed = str.slice(0, -suffix.length);
+      if (stemmed.length >= 3) {
+        candidates.push(stemmed);
+        break;
+      }
+    }
+  }
+
+  // Deduplicate and pick random candidate
+  if (candidates.length > 0) {
+    const uniqueCandidates = [...new Set(candidates)];
+    const validCandidates = uniqueCandidates.filter(c => c.length >= 3 && c.length <= 20);
+
+    if (validCandidates.length > 0) {
+      return validCandidates[Math.floor(Math.random() * validCandidates.length)];
+    }
+  }
+
+  return null;
 }
+
+// ============================================================================
+// HELPERS
+// ============================================================================
 
 async function getRandomWord(mode) {
   try {
-    const response = await axios.get("https://random-word-api.herokuapp.com/word?number=5");
+    const response = await http.get("https://random-word-api.herokuapp.com/word?number=5");
     const words = response.data;
+    
+    if (!Array.isArray(words) || words.length === 0) return "bruh";
+
     if (mode === "short") {
       const short = words.find(w => w.length <= 5);
-      return short || words[0];
+      return short || words[0]; 
     } else if (mode === "medium") {
       const med = words.find(w => w.length <= 9);
       return med || words[0];
     }
     return words[0];
   } catch (e) {
-    return "bruh";
+    return "bruh"; 
   }
-}
-
-async function isDictionaryWord(word) {
-  if (dictCache.has(word)) {
-    return dictCache.get(word);
-  }
-  try {
-    const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${word}`;
-    const response = await axios.get(url, { validateStatus: () => true });
-    const isValid = response.status === 200;
-    dictCache.set(word, isValid);
-    return isValid;
-  } catch (e) {
-    console.log("Dictionary API Error: " + e);
-    return false;
-  }
-}
-
-function deLeetStringWithMap(str) {
-  if (!str) return "";
-  let processed = str.toLowerCase();
-  const replacements = [];
-  for (const realChar in LEET_MAP) {
-    const symbols = LEET_MAP[realChar];
-    for (let i = 0; i < symbols.length; i++) {
-      replacements.push({ leet: symbols[i], real: realChar });
-    }
-  }
-  replacements.sort((a, b) => b.leet.length - a.leet.length);
-  for (let j = 0; j < replacements.length; j++) {
-    const item = replacements[j];
-    const esc = item.leet.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const re = new RegExp(esc, "g");
-    processed = processed.replace(re, item.real);
-  }
-  return processed;
-}
-
-function generateRepeatedVariations(text) {
-  if (!text) return [];
-  const groups = [];
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (groups.length > 0 && groups[groups.length - 1][0] === char) {
-      groups[groups.length - 1] += char;
-    } else {
-      groups.push(char);
-    }
-  }
-  const optionsList = [];
-  for (let g = 0; g < groups.length; g++) {
-    const group = groups[g];
-    const char = group[0];
-    if (group.length === 1) {
-      optionsList.push([char]);
-    } else {
-      optionsList.push([char, char + char]);
-    }
-  }
-  return cartesianProduct(optionsList);
-}
-
-function cartesianProduct(arrays) {
-  let result = [""];
-  if (arrays.length > 15) return [arrays.map(a => a[0]).join("")];
-  for (let i = 0; i < arrays.length; i++) {
-    const currentOptions = arrays[i];
-    const temp = [];
-    if (result.length > 200) return result;
-    for (let r = 0; r < result.length; r++) {
-      for (let o = 0; o < currentOptions.length; o++) {
-        temp.push(result[r] + currentOptions[o]);
-      }
-    }
-    result = temp;
-  }
-  return result;
 }
 
 function shuffleArray(array) {
@@ -299,270 +764,75 @@ function shuffleArray(array) {
   return arr;
 }
 
+// ============================================================================
+// MASTER AVAILABILITY CHECKER
+// ============================================================================
+
 async function checkRobloxValidation(usernameToTest) {
   const apiUrl = "https://auth.roblox.com/v2/usernames/validate";
-  const payload = {
-    "username": usernameToTest,
-    "birthday": "1999-01-01"
-  };
+  const payload = { "username": usernameToTest, "birthday": "1999-01-01" };
 
   try {
-    console.log("Querying Roblox Validation API for censorship...");
-    const response = await axios.post(apiUrl, payload, {
-      headers: { 'Content-Type': 'application/json' },
-      validateStatus: () => true
-    });
-    const jsonResponse = response.data;
-
-    if (jsonResponse.code) {
-      const isSuccess = (jsonResponse.message === "Valid username.");
-      if (!isSuccess) {
-        console.log("FAIL: Roblox Validation API rejected it. Code: " + jsonResponse.code + ", Message: " + jsonResponse.message);
-        return false;
-      }
+    const response = await http.post(apiUrl, payload, { validateStatus: () => true });
+    // Code 0 is success in Roblox's validate schema [1]
+    if (response.data && typeof response.data.code !== 'undefined') {
+      return response.data.code === 0;
     }
-    console.log("PASS: Roblox Validation API is clean.");
     return true;
   } catch (error) {
-    console.error("CRITICAL EXCEPTION in Roblox Validation API fetch: " + error);
     return false;
   }
 }
 
-function applySmartSubtleReduction(word) {
-  if (!word || word.length < 4) return null;
-
-  const reductions = [];
-  const lowerWord = word.toLowerCase();
-
-  const doubleLetterPattern = /(.)\1+/g;
-  const reducedDouble = lowerWord.replace(doubleLetterPattern, '$1');
-  if (reducedDouble !== lowerWord && reducedDouble.length >= 3) {
-    reductions.push(reducedDouble);
+async function checkIsProfane(text) {
+  try {
+    const encodedText = encodeURIComponent(text);
+    const url = "https://www.purgomalum.com/service/json?text=" + encodedText;
+    const response = await http.get(url, { validateStatus: () => true });
+    if (response.data && response.data.result && response.data.result.indexOf("*") !== -1) return true; 
+    return false;
+  } catch (e) {
+    return false; 
   }
-
-  const vowelRemovals = [];
-  const vowels = ['a', 'e', 'i', 'o', 'u'];
-  for (let i = 1; i < lowerWord.length - 1; i++) {
-    if (vowels.includes(lowerWord[i])) {
-      const reduced = lowerWord.slice(0, i) + lowerWord.slice(i + 1);
-      if (reduced.length >= 3 && reduced.length <= 20) {
-        vowelRemovals.push(reduced);
-      }
-    }
-  }
-  reductions.push(...vowelRemovals.slice(0, 3));
-
-  if (lowerWord.length > 6) {
-    const truncated = lowerWord.substring(0, Math.max(4, Math.floor(lowerWord.length * 0.7)));
-    if (truncated.length >= 3) {
-      reductions.push(truncated);
-    }
-  }
-
-  const suffixes = ['er', 'ly', 'ing', 'ed', 'ness', 'tion', 'sion', 'ment', 'able', 'ible'];
-  for (const suffix of suffixes) {
-    if (lowerWord.endsWith(suffix) && lowerWord.length > suffix.length + 2) {
-      const stemmed = lowerWord.slice(0, -suffix.length);
-      if (stemmed.length >= 3) {
-        reductions.push(stemmed);
-        break;
-      }
-    }
-  }
-
-  const uniqueReductions = [...new Set(reductions)];
-
-  for (const reduction of uniqueReductions) {
-    if (reduction.length >= 3 && reduction.length <= 20) {
-      return reduction;
-    }
-  }
-
-  return null;
-}
-
-async function stripSafeDictionaryWords(str) {
-  const chars = str.split("");
-  const length = chars.length;
-  for (let i = 0; i < length; i++) {
-    for (let len = 12; len >= 3; len--) {
-      if (i + len > length) continue;
-      const substring = str.substring(i, i + len);
-      if (substring.indexOf(" ") !== -1) continue;
-      if (await isDictionaryWord(substring)) {
-        if (BASE_BAD_WORDS.indexOf(substring) !== -1) {
-          continue;
-        }
-        for (let k = 0; k < len; k++) {
-          chars[i + k] = " ";
-        }
-        i += len - 1;
-        break;
-      }
-    }
-  }
-  return chars.join("");
-}
-
-async function isProfaneDeepScan(text) {
-  if (!text) return false;
-  const lowerText = text.toLowerCase();
-  const rootsToCheck = [lowerText.replace(/[\s_\-\.]/g, "")];
-  if (/[\s_\-\.]/.test(lowerText)) {
-    const vowels = ['a', 'e', 'i', 'o', 'u'];
-    for (let v = 0; v < vowels.length; v++) {
-      rootsToCheck.push(lowerText.replace(/[\s_\-\.]/g, vowels[v]));
-    }
-  }
-  const cleanBase = rootsToCheck[0];
-  const deLeeted = deLeetStringWithMap(cleanBase);
-  if (deLeeted !== cleanBase) {
-    rootsToCheck.push(deLeeted);
-  }
-  let allCandidates = [];
-  for (let i = 0; i < rootsToCheck.length; i++) {
-    const root = rootsToCheck[i];
-    if (i === 0) {
-      allCandidates = allCandidates.concat(generateRepeatedVariations(root));
-    } else {
-      allCandidates.push(root);
-    }
-  }
-  allCandidates = [...new Set(allCandidates)];
-  console.log("Deep Scan checking " + allCandidates.length + " candidates");
-  for (let c = 0; c < allCandidates.length; c++) {
-    const variant = allCandidates[c];
-    if (BASE_BAD_WORDS.indexOf(variant) !== -1) {
-      console.log("FAIL: Found '" + variant + "' in ban list.");
-      return true;
-    }
-    const eaten = await stripSafeDictionaryWords(variant);
-    if (eaten.trim().length === 0) continue;
-    for (let b = 0; b < BASE_BAD_WORDS.length; b++) {
-      if (eaten.indexOf(BASE_BAD_WORDS[b]) !== -1) {
-        console.log("FAIL: Detected '" + BASE_BAD_WORDS[b] + "' inside '" + variant + "'");
-        return true;
-      }
-    }
-    const variantSkeleton = variant.replace(/[aeiou]/g, "");
-    if (variantSkeleton.length >= 2) {
-      for (let k = 0; k < BASE_BAD_WORDS.length; k++) {
-        const rootBad = BASE_BAD_WORDS[k];
-        const badSkeleton = rootBad.replace(/[aeiou]/g, "");
-        if (badSkeleton.length >= 2 && variantSkeleton === badSkeleton) {
-          console.log("FAIL: Skeleton match (" + variantSkeleton + ")");
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
-async function isComposedOfSafeWords(username) {
-  const roots = [username];
-  const deLeeted = deLeetStringWithMap(username);
-  if (deLeeted !== username) {
-    roots.push(deLeeted);
-  }
-  for (let i = 0; i < roots.length; i++) {
-    const root = roots[i];
-    if (!/^[a-zA-Z]+$/.test(root)) {
-      continue;
-    }
-    let badWordFound = "";
-    async function decompose(remainingString) {
-      if (remainingString.length === 0) {
-        return true;
-      }
-      for (let len = remainingString.length; len >= 3; len--) {
-        const currentWord = remainingString.substring(0, len);
-        if (await isDictionaryWord(currentWord)) {
-          if (BASE_BAD_WORDS.indexOf(currentWord) !== -1) {
-            badWordFound = currentWord;
-            return true;
-          }
-          const restOfString = remainingString.substring(len);
-          if (await decompose(restOfString)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-    const isFullyDecomposed = await decompose(root);
-    if (isFullyDecomposed) {
-      return {
-        isSafe: true,
-        hasBadWord: (badWordFound.length > 0),
-        badWord: badWordFound
-      };
-    }
-  }
-  return {
-    isSafe: false,
-    hasBadWord: false,
-    badWord: ""
-  };
 }
 
 async function checkUsernameAvailability(usernameToTest) {
-  console.log("--- Checking Availability for: " + usernameToTest + " ---");
-  if (!/^[a-zA-Z0-9_]+$/.test(usernameToTest)) {
-    console.log("FAIL: Regex validation failed (Invalid characters).");
-    return false;
-  }
+  if (!usernameToTest || !/^[a-zA-Z0-9_]+$/.test(usernameToTest)) return false;
+  
+  // Roblox rule: at most 1 underscore, and cannot start or end with underscore
+  if (usernameToTest.startsWith('_') || usernameToTest.endsWith('_')) return false;
   const underscores = (usernameToTest.match(/_/g) || []).length;
-  if (underscores > 1) {
-    console.log("FAIL: Too many underscores.");
-    return false;
+  if (underscores > 1) return false;
+
+  if (usernameToTest.length < 3 || usernameToTest.length > 20) return false;
+
+  if (ObscenityEngine.hasMatch(usernameToTest)) return false;
+
+  if (!(await checkRobloxValidation(usernameToTest))) return false;
+
+  let cookieHeader = "";
+  if (ROBLOX_SECURITY_TOKEN) {
+    cookieHeader = ROBLOX_SECURITY_TOKEN.startsWith(".ROBLOSECURITY=") 
+      ? ROBLOX_SECURITY_TOKEN 
+      : `.ROBLOSECURITY=${ROBLOX_SECURITY_TOKEN}`;
   }
-  if (usernameToTest.length < 3 || usernameToTest.length > 20) {
-    console.log("FAIL: Length must be 3-20 characters.");
-    return false;
-  }
-  let shouldRunDeepScan = true;
-  const lowerUser = usernameToTest.toLowerCase();
-  const safetyCheckResult = await isComposedOfSafeWords(lowerUser);
-  if (safetyCheckResult.isSafe && safetyCheckResult.hasBadWord) {
-    console.log("FAIL: Composed of real words, but component '" + safetyCheckResult.badWord + "' is on the ban list.");
-    return false;
-  }
-  if (shouldRunDeepScan) {
-    if (await isProfaneDeepScan(usernameToTest)) {
-      console.log("FAIL: Profanity detected in deep scan.");
-      return false;
-    }
-  }
+
   const apiUrl = "https://users.roblox.com/v1/usernames/users";
   const payload = { "usernames": [usernameToTest], "excludeBannedUsers": false };
+
   try {
-    console.log("Querying Roblox API (check if taken)...");
-    const response = await axios.post(apiUrl, payload, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': ROBLOX_SECURITY_TOKEN
-      },
+    const response = await http.post(apiUrl, payload, {
+      headers: cookieHeader ? { 'Cookie': cookieHeader } : {},
       validateStatus: () => true
     });
-    if (response.status !== 200) {
-      console.error("ROBLOX API ERROR: " + response.status);
-      return false;
-    }
-    const jsonResponse = response.data;
-    const isRobloxAvailable = (jsonResponse.data && jsonResponse.data.length === 0);
-    if (!isRobloxAvailable) {
-      console.log("FAIL: Username taken on Roblox.");
-      return false;
-    }
-    console.log("Roblox says available. Checking Purgomalum...");
-    const isClean = !(await checkIsProfane(usernameToTest));
-    if (!isClean) console.log("FAIL: Purgomalum flagged it.");
-    else console.log("SUCCESS: Username is available!");
-    return isClean;
+
+    if (response.status !== 200) return false; 
+
+    const isRobloxAvailable = (response.data && response.data.data && response.data.data.length === 0);
+    if (!isRobloxAvailable) return false;
+
+    return !(await checkIsProfane(usernameToTest));
   } catch (error) {
-    console.error("CRITICAL EXCEPTION in Roblox API fetch: " + error);
     return false;
   }
 }
@@ -570,21 +840,28 @@ async function checkUsernameAvailability(usernameToTest) {
 async function solveLeetspeak(word) {
   const wordArr = word.toLowerCase().split('');
   const indices = [];
+  
   for (let i = 0; i < wordArr.length; i++) {
     if (LEET_MAP[wordArr[i]]) indices.push(i);
   }
+
   if (indices.length === 0) return null;
-  const maxLevel = Math.min(indices.length, 5);
+
+  const maxLevel = Math.min(indices.length, 3);
+  
+  // Rate-limiting-safe: max 2 attempts per level
   for (let level = 1; level <= maxLevel; level++) {
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       const tempWordArr = [...wordArr];
       const targets = shuffleArray(indices).slice(0, level);
+      
       targets.forEach(idx => {
         const char = tempWordArr[idx];
         const replacements = LEET_MAP[char];
-        const replacementIdx = Math.floor(Math.random() * Math.min(replacements.length, 2));
+        const replacementIdx = Math.floor(Math.random() * Math.min(replacements.length, 2)); 
         tempWordArr[idx] = replacements[replacementIdx];
       });
+
       const candidate = tempWordArr.join('');
       if (candidate.length >= 3 && candidate.length <= 20) {
         if (await checkUsernameAvailability(candidate)) {
@@ -596,78 +873,95 @@ async function solveLeetspeak(word) {
   return null;
 }
 
+// ============================================================================
+// COOL GENERATOR LOGIC
+// ============================================================================
+
 async function generateCoolUsername() {
-  const isComboMode = Math.random() < 0.30;
-  const slangListDefined = SLANG_LIST && SLANG_LIST.length > 0;
+  const isComboMode = Math.random() < 0.30; 
+  const slangListDefined = typeof SLANG_LIST !== 'undefined' && SLANG_LIST.length > 0;
+
   if (isComboMode) {
-    const comboType = Math.random();
+    const comboType = Math.random(); 
     let part1 = "";
     let part2 = "";
+
     if (comboType < 0.33) {
       const allowLong = Math.random() < 0.20;
       part1 = await getRandomWord(allowLong ? "medium" : "short");
       part2 = await getRandomWord(allowLong ? "medium" : "short");
     } else if (comboType < 0.66) {
-      const rawSlang = slangListDefined ? SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)] : await getRandomWord("short");
-      part1 = rawSlang.replace(/_/g, "");
+      const rawSlang1 = slangListDefined ? SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)] : await getRandomWord("short");
+      part1 = rawSlang1.replace(/_/g, ""); 
       part2 = await getRandomWord("short");
     } else {
       part1 = await getRandomWord("short");
-      const rawSlang = slangListDefined ? SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)] : await getRandomWord("short");
-      part2 = rawSlang.replace(/_/g, "");
+      const rawSlang2 = slangListDefined ? SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)] : await getRandomWord("short");
+      part2 = rawSlang2.replace(/_/g, "");
     }
+    
     part1 = part1.charAt(0).toUpperCase() + part1.slice(1);
     part2 = part2.charAt(0).toUpperCase() + part2.slice(1);
+    
     let combined = part1 + part2;
     if (combined.length > 20) combined = combined.substring(0, 20);
+
     if (await checkUsernameAvailability(combined)) {
       return { "username": combined, "available": true, "method": "ComboMode" };
     } else {
       return { "available": false };
     }
+
   } else {
     let baseWord = "";
     const isSlang = Math.random() < 0.85;
+
     if (isSlang && slangListDefined) {
       const rawSlang = SLANG_LIST[Math.floor(Math.random() * SLANG_LIST.length)];
       baseWord = rawSlang.replace(/_/g, "");
     } else {
       baseWord = await getRandomWord("random");
     }
+    
     if (await checkUsernameAvailability(baseWord)) {
-      return { "username": baseWord, "available": true, "method": "CleanRandom" };
+         return { "username": baseWord, "available": true, "method": "CleanRandom" };
     }
 
     const methodChoice = Math.random();
-
+    
     if (methodChoice < 0.50) {
       const subtleResult = applySmartSubtleReduction(baseWord);
-      if (subtleResult) {
-        if (await checkUsernameAvailability(subtleResult)) {
-          return { "username": subtleResult, "available": true, "method": "SubtleReduction" };
-        }
+      if (subtleResult && (await checkUsernameAvailability(subtleResult))) {
+        return { "username": subtleResult, "available": true, "method": "SubtleReduction" };
       }
-    }
-
+    } 
+    
     const leetResult = await solveLeetspeak(baseWord);
     if (leetResult) {
       return { "username": leetResult, "available": true, "method": "Leetspeak" };
     }
+
     return { "available": false };
   }
 }
 
+// ============================================================================
+// EXPRESS REQUEST HANDLERS
+// ============================================================================
+
 async function handleCoolRequest() {
   for (let i = 0; i < 4; i++) {
     const result = await generateCoolUsername();
-    if (result.available && !(await isProfaneDeepScan(result.username))) {
-      return result;
+    
+    if (result.available && !ObscenityEngine.hasMatch(result.username)) {
+       return result;
     }
   }
+
   return {
-    "username": null,
-    "available": false,
-    "error": "Generation timed out."
+      "username": null,
+      "available": false,
+      "error": "Generation timed out."
   };
 }
 
@@ -682,7 +976,11 @@ async function handleSpecificCheck(username) {
   return (await checkUsernameAvailability(username)) ? "AVAILABLE" : "TAKEN";
 }
 
-app.get('/', async (req, res) => {
+// ============================================================================
+// EXPRESS ROUTES (Render Ready)
+// ============================================================================
+
+app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Roblox Username Checker API' });
 });
 
