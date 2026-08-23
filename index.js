@@ -342,7 +342,7 @@ const SUBSTRING_BAD_WORDS = [
   "barenaked", "bastard", "bastardo", "bastinado", "bbw", "bdsm", "beaner", "beardedclam", "beastial", 
   "beastiality", "beaver cleaver", "beaver lips", "bellend", "bestiality", "big black", "big breasts", 
   "big knockers", "big tits", "bimbos", "birdlock", "bitch", "blow me", "blow mud", "blowjob", 
-  "blow your load", "blue waffle", "blumpkin", "bodily", "boiolas", "bollocks", "bondage", "boobies", 
+  "blow your load", "blue waffle", "blumpkin", "bodily", "boiolas", "bollocks", "bondage", "boob", "boobs", "boobies", 
   "bootie", "booty call", "brown showers", "brunette action", "buceta", "bukkake", "bulldyke", 
   "bullet vibe", "bullshit", "bung hole", "bunghole", "bunny fucker", "bust a load", "busty", 
   "butt fuck", "buttcheeks", "butthole", "buttmuch", "caca", "cahone", "camel toe", "cameltoe", 
