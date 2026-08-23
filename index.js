@@ -425,7 +425,7 @@ const SUBSTRING_BAD_WORDS = [
 ];
 
 const BOUNDARY_BAD_WORDS = [
-  "ass", "anal", "rape", "cum", "weed", "pot", "dih", "kys", "stroke", "snatch", "knob", "muff", "tit", "tits", 
+  "ass", "anal", "rape", "cum", "weed", "pot", "fap", "dih", "kys", "stroke", "snatch", "knob", "muff", "tit", "tits", 
   "chode", "dong", "hump", "lube", "pimp", "scat", "shaft", "shag", "skank", "strip", "tart", 
   "tramp", "sex", "boner", "perv", "fag", "fk", "fuk", "bum", "crap", "damn", "hell", "homo", 
   "jerk", "lmao", "omg", "piss", "poop", "prick", "pube", "queer", "turd", "oral", "head",
